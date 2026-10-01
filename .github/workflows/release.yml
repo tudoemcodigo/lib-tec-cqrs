@@ -1,0 +1,150 @@
+name: Publicar versão
+
+# Uso: Actions -> "Publicar versão" -> Run workflow -> digite a versão (ex.: 1.0.0) -> Run.
+#   1. Valida a versão e verifica se a tag ainda não existe
+#   2. Roda o ci.yml: build, testes e pacote (sem publicar)
+#   3. Só se tudo passar: cria a tag vX.Y.Z e o Release com notas automáticas e os pacotes anexados
+#   4. Só depois da tag: publica o pacote (exatamente o testado) no GitHub Packages
+#
+# A ordem evita pacote órfão (publicado sem tag/Release). Se a publicação falhar, a tag e o Release já existem com o
+# pacote anexado: use "Re-run failed jobs" para publicar de novo o mesmo artefato (--skip-duplicate).
+#
+# Um Release criado com GITHUB_TOKEN não dispara outros workflows; por isso o ci.yml
+# é chamado aqui diretamente e não há publicação em duplicidade.
+#
+# Actions fixadas por SHA (com a tag no comentário); o Dependabot atualiza SHA e comentário juntos.
+# Inputs, outputs e secrets entram nos scripts por "env:" (nunca interpolados por expressões do Actions dentro de "run:").
+on:
+  workflow_dispatch:
+    inputs:
+      versao:
+        description: "Versão (ex.: 1.0.0 ou 1.1.0-rc.1)"
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publicar-versao
+  cancel-in-progress: false
+
+env:
+  NUGET_FEED: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
+
+jobs:
+  validar:
+    name: Validar versão
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.validar.outputs.version }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0   # tags, para conferir se a versão já existe
+          # Só leitura local (git rev-parse); a tag é criada depois, pelo "gh release create" com o GH_TOKEN do passo
+          persist-credentials: false
+
+      - name: Validar
+        id: validar
+        shell: bash
+        env:
+          VERSAO: ${{ inputs.versao }}
+        run: |
+          set -euo pipefail
+          VERSION="${VERSAO#v}"
+
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::Execute a partir da main (atual: $GITHUB_REF_NAME)."
+            exit 1
+          fi
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::A versão '$VERSAO' não segue o padrão X.Y.Z (ex.: 1.0.0)."
+            exit 1
+          fi
+          if git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null; then
+            echo "::error::A tag v$VERSION já existe."
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build, testes e pacote
+    needs: validar
+    uses: ./.github/workflows/ci.yml
+    with:
+      version: ${{ needs.validar.outputs.version }}
+    # O ci.yml declara as permissões do job publish (que não roda quando chamado daqui); o GitHub exige que o
+    # chamador conceda o máximo declarado no workflow chamado.
+    permissions:
+      contents: write
+      packages: write
+
+  release:
+    name: Criar tag e release
+    needs: [validar, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download pacotes
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: nuget
+          path: artifacts
+
+      - name: Criar tag e release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.validar.outputs.version }}
+        run: |
+          PRERELEASE=""
+          if [[ "$VERSION" == *-* ]]; then PRERELEASE="--prerelease"; fi
+
+          gh release create "v$VERSION" artifacts/*.nupkg artifacts/*.snupkg \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "v$VERSION" \
+            --generate-notes \
+            $PRERELEASE
+
+  publicar:
+    name: Publicar no GitHub Packages
+    needs: [validar, release]
+    runs-on: ubuntu-24.04
+    permissions:
+      packages: write   # push no feed NuGet do GitHub
+
+    steps:
+      - name: Download pacotes
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: nuget
+          path: artifacts
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+
+      # O GitHub Packages não aceita .snupkg; os símbolos ficam anexados ao Release
+      - name: Push no GitHub Packages
+        env:
+          NUGET_API_KEY: ${{ secrets.GITHUB_TOKEN }}
+        run: >
+          dotnet nuget push "artifacts/*.nupkg"
+          --source "$NUGET_FEED"
+          --api-key "$NUGET_API_KEY"
+          --skip-duplicate
+          --no-symbols
+
+      - name: Resumo
+        env:
+          VERSION: ${{ needs.validar.outputs.version }}
+        run: |
+          echo "### ✅ TEC.Cqrs, TEC.Cqrs.FluentValidation e TEC.Cqrs.AspNetCore [v$VERSION]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/v$VERSION) publicados" >> "$GITHUB_STEP_SUMMARY"
+          echo "Feed: \`$NUGET_FEED\`" >> "$GITHUB_STEP_SUMMARY"

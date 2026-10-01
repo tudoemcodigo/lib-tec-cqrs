@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Configurações de build, segurança, AOT e metadados comuns: ..\Directory.Build.props -->
+
+  <PropertyGroup>
+    <RootNamespace>TEC.Cqrs.AspNetCore</RootNamespace>
+    <PackageId>TEC.Cqrs.AspNetCore</PackageId>
+    <Version>0.0.1</Version>
+    <Description>Integração do TEC.Cqrs com ASP.NET Core: Result → resposta HTTP com o envelope ApiResponse do TEC.Core (Minimal APIs e Controllers, com metadados OpenAPI), tratamento global de exceções, usuário do HttpContext e policies de autorização (IAuthorizationService) no pipeline.</Description>
+    <PackageTags>cqrs;mediator;aspnetcore;minimal-api;openapi;tec</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\TEC.Cqrs\Images\Logo.png" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TEC.Cqrs\TEC.Cqrs.csproj" />
+  </ItemGroup>
+
+</Project>

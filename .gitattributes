@@ -1,0 +1,37 @@
+# Normalização de fim de linha: o repositório guarda LF; cada arquivo de texto é detectado automaticamente
+* text=auto
+
+# Código, documentação e configuração: sempre LF (igual ao que já está no repositório)
+*.cs        text eol=lf diff=csharp
+*.md        text eol=lf
+*.csproj    text eol=lf
+*.props     text eol=lf
+*.targets   text eol=lf
+*.slnx      text eol=lf
+*.json      text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.config    text eol=lf
+*.editorconfig text eol=lf
+.gitattributes text eol=lf
+.gitignore  text eol=lf
+
+# Scripts do Windows exigem CRLF
+*.cmd       text eol=crlf
+*.bat       text eol=crlf
+*.ps1       text eol=crlf
+
+# Binários (nunca converter nem tentar diff textual)
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.ico       binary
+*.pdf       binary
+*.zip       binary
+*.dll       binary
+*.exe       binary
+*.nupkg     binary
+*.snupkg    binary
+*.pfx       binary
+*.snk       binary

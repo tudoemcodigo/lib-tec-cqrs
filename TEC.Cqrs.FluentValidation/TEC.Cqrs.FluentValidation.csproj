@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Configurações de build, segurança, AOT e metadados comuns: ..\Directory.Build.props -->
+
+  <PropertyGroup>
+    <RootNamespace>TEC.Cqrs.FluentValidation</RootNamespace>
+    <PackageId>TEC.Cqrs.FluentValidation</PackageId>
+    <Version>0.0.1</Version>
+    <Description>Validação do pipeline do TEC.Cqrs com FluentValidation: executa os AbstractValidator de cada requisição, converte as falhas em erros por campo (camelCase) e trata a FluentValidation.ValidationException lançada nos handlers.</Description>
+    <PackageTags>cqrs;mediator;fluentvalidation;validation;tec</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\TEC.Cqrs\Images\Logo.png" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FluentValidation" Version="12.1.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TEC.Cqrs\TEC.Cqrs.csproj" />
+  </ItemGroup>
+
+</Project>

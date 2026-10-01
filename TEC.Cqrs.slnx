@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="TEC.Cqrs.AspNetCore/TEC.Cqrs.AspNetCore.csproj" />
+  <Project Path="TEC.Cqrs.FluentValidation/TEC.Cqrs.FluentValidation.csproj" />
+  <Project Path="TEC.Cqrs.Tests/TEC.Cqrs.Tests.csproj" />
+  <Project Path="TEC.Cqrs/TEC.Cqrs.csproj" />
+</Solution>

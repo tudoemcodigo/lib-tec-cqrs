@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Configurações de build, segurança, AOT e metadados comuns: ..\Directory.Build.props -->
+
+  <PropertyGroup>
+    <RootNamespace>TEC.Cqrs</RootNamespace>
+    <PackageId>TEC.Cqrs</PackageId>
+    <Version>0.0.1</Version>
+    <Description>CQRS padronizado sobre o TEC.Core: mediator próprio (sem MediatR), commands/queries com Result, pipeline de logging, exceções, autorização, validação, performance e transação, notificações, métricas e rastreamento. Compatível com Native AOT (registro explícito). Validação com FluentValidation em TEC.Cqrs.FluentValidation e integração HTTP em TEC.Cqrs.AspNetCore.</Description>
+    <PackageTags>cqrs;mediator;pipeline;aot;tec</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+    <None Include="Images\Logo.png" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <!--
+    TEC.Core: por enquanto vem do código-fonte local (..\..\TEC.Core) quando a pasta existe; senão, do feed interno
+    (ver ..\nuget.config: packageSourceMapping garante que TEC.* nunca seja baixado do nuget.org). Regra em
+    ..\Directory.Build.props (UseLocalTecCore).
+    Sem ASP.NET Core e sem FluentValidation: o núcleo serve também a jobs, workers e mensageria.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
+  </ItemGroup>
+  <!--
+    Os pacotes satélites usam helpers internos do núcleo (varredura, consultas ao container, mapeamento de exceções) em
+    vez de reimplementá-los. Os três pacotes são versionados e publicados juntos (TEC.Cqrs.Tests: ..\Directory.Build.props).
+  -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="TEC.Cqrs.AspNetCore" />
+    <InternalsVisibleTo Include="TEC.Cqrs.FluentValidation" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(UseLocalTecCore)' == 'true'">
+    <ProjectReference Include="$(TecCoreProjectPath)" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(UseLocalTecCore)' != 'true'">
+    <PackageReference Include="TEC.Core" Version="0.0.1-preview.5" />
+  </ItemGroup>
+
+</Project>
