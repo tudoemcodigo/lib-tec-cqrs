@@ -24,6 +24,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
+    <PackageReference Include="TEC.Core" Version="0.0.1-preview.5" />
   </ItemGroup>
   <!--
     Os pacotes satélites usam helpers internos do núcleo (varredura, consultas ao container, mapeamento de exceções) em
@@ -32,10 +33,6 @@
   <ItemGroup>
     <InternalsVisibleTo Include="TEC.Cqrs.AspNetCore" />
     <InternalsVisibleTo Include="TEC.Cqrs.FluentValidation" />
-  </ItemGroup>
-
-  <ItemGroup Condition="'$(UseLocalTecCore)' == 'true'">
-    <ProjectReference Include="$(TecCoreProjectPath)" />
   </ItemGroup>
   <ItemGroup Condition="'$(UseLocalTecCore)' != 'true'">
     <PackageReference Include="TEC.Core" Version="0.0.1-preview.5" />
