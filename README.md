@@ -6,6 +6,7 @@
 
 Mediator próprio (sem MediatR) · `Result` · FluentValidation · Notificações pós-commit · ASP.NET Core · OpenTelemetry · Native AOT
 
+[![CI](https://github.com/tudoemcodigo/lib-tec-cqrs/actions/workflows/ci.yml/badge.svg)](https://github.com/tudoemcodigo/lib-tec-cqrs/actions/workflows/ci.yml)
 [![.NET](https://img.shields.io/badge/.NET-8.0%20%7C%2010.0-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
 [![Versão](https://img.shields.io/badge/vers%C3%A3o-0.0.1-blue)](#)
 [![Licença: MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-green)](LICENSE)
