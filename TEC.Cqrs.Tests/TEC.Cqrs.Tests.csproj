@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Um único projeto de testes para os três pacotes; roda em net8.0 e net10.0 (TargetFrameworks em ..\Directory.Build.props) -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="TUnit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TEC.Cqrs\TEC.Cqrs.csproj" />
+    <ProjectReference Include="..\TEC.Cqrs.FluentValidation\TEC.Cqrs.FluentValidation.csproj" />
+    <ProjectReference Include="..\TEC.Cqrs.AspNetCore\TEC.Cqrs.AspNetCore.csproj" />
+  </ItemGroup>
+
+</Project>

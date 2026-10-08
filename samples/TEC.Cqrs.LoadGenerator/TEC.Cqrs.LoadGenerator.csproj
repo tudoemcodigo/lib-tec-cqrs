@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Gerador de carga HTTP próprio (sem licença nem binário externo) para a API de exemplo (TEC.Cqrs.SampleApi).
+    Uso e opções da linha de comando em samples/README.md.
+    Também é referenciado pelos testes de carga (TEC.Cqrs.LoadTests), que usam a classe LoadRunner em processo.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+</Project>

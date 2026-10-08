@@ -1,0 +1,23 @@
+<Project>
+
+  <!--
+    Central Package Management: a versão de cada pacote é declarada uma única vez, aqui.
+  -->
+
+  <!--
+    Componentes TEC.* consumidos: versão PUBLICADA no feed tec-interno (todos os pacotes de um componente têm a mesma
+    versão). No csproj use <TecReference Include="TEC.X" />, sem versão: vira PackageReference nesta versão, na máquina
+    e no CI; o projeto vizinho só entra com -p:TecUseLocalProjects=true (build/Tec.Build.targets).
+  -->
+  <ItemGroup>
+    <PackageVersion Include="TEC.Core" Version="0.0.1" />
+  </ItemGroup>
+
+  <!-- Terceiros -->
+  <ItemGroup>
+    <PackageVersion Include="FluentValidation" Version="12.1.1" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
+    <PackageVersion Include="TUnit" Version="1.72.16" />
+  </ItemGroup>
+
+</Project>

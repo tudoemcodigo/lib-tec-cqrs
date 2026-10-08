@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Testes de carga, performance e segurança sob carga: concorrência, alocação por Send, volume, soak (longa duração),
+    carga HTTP e ataques na API de exemplo. Os testes rápidos (Carga-CI) rodam no CI a cada pull request; os pesados têm [Explicit] e só
+    rodam quando selecionados por filtro (veja docs/testes.md). Framework, lock file e auditoria em ../Directory.Build.props.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="TUnit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TEC.Cqrs\TEC.Cqrs.csproj" />
+    <ProjectReference Include="..\samples\TEC.Cqrs.SampleApi\TEC.Cqrs.SampleApi.csproj" />
+    <ProjectReference Include="..\samples\TEC.Cqrs.LoadGenerator\TEC.Cqrs.LoadGenerator.csproj" />
+  </ItemGroup>
+
+</Project>

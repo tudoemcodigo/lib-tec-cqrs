@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Configurações de build, segurança, AOT e metadados comuns: ..\Directory.Build.props -->
+
+  <PropertyGroup>
+    <RootNamespace>TEC.Cqrs</RootNamespace>
+    <Description>Separa comandos e consultas e aplica log, autorização, validação e transação automaticamente em cada requisição, publicando eventos só depois que a operação é confirmada.</Description>
+    <PackageTags>cqrs;mediator;pipeline;aot;tec</PackageTags>
+  </PropertyGroup>
+
+  <!--
+    TEC.Core: pacote do feed interno (tec-interno); já traz Microsoft.Extensions.DependencyInjection.Abstractions.
+    Sem ASP.NET Core e sem FluentValidation: o núcleo serve também a jobs, workers e mensageria.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <TecReference Include="TEC.Core" />
+  </ItemGroup>
+
+  <!--
+    Os pacotes satélites usam helpers internos do núcleo (varredura, consultas ao container, mapeamento de exceções) em
+    vez de reimplementá-los. Os três pacotes são versionados e publicados juntos (TEC.Cqrs.Tests: ..\Directory.Build.props).
+  -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="TEC.Cqrs.AspNetCore" />
+    <InternalsVisibleTo Include="TEC.Cqrs.FluentValidation" />
+  </ItemGroup>
+
+</Project>
