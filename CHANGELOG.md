@@ -2,7 +2,7 @@
 
 Todas as mudanças relevantes do **TEC.Cqrs** são registradas aqui. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e o projeto usa [Versionamento Semântico](https://semver.org/lang/pt-BR/). Enquanto a versão for `0.x`, mudanças incompatíveis podem ocorrer em versões MINOR. Os três pacotes saem sempre juntos, com a mesma versão, e devem ser usados na mesma versão (os satélites usam internos do núcleo).
 
-## [0.1.0] - não publicado
+## [0.1.0] - 2026-10-09
 
 ### ✨ Adicionado
 
