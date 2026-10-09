@@ -42,7 +42,8 @@ Mediator próprio · `Result` em vez de exceção · Autorização e validação
 
 | Sem o TEC.Cqrs | Com o TEC.Cqrs |
 |---|---|
-| Autorização só no endpoint: o mesmo caso de uso chamado por um job ou por uma fila roda sem verificação | `[AuthorizeRequest]` e `IRequestAuthorizer<T>` verificados **no pipeline**, em qualquer ponto de entrada |
+| Autorização só no endpoint: o mesmo caso de uso chamado por um job ou por uma fila roda sem verificação | `[AuthorizeRequest]`, `[RequirePermission]` e `IRequestAuthorizer<T>` verificados **no pipeline**, em qualquer ponto de entrada |
+| Clique duplo ou retry do cliente cria o pedido duas vezes | `.WithIdempotency()`: a mesma `Idempotency-Key` devolve a resposta original, com reserva contra requisições simultâneas |
 | Requisição nova sem regra de acesso passa despercebida | `RequireAuthorization` (padrão) derruba a **subida** listando as requisições sem autorização declarada |
 | Command sem validação de entrada vai para produção | `RequireValidatorForCommands` (padrão): command sem validador lança exceção em vez de rodar sem validar |
 | `try/catch` e `BeginTransaction` repetidos em cada handler | Um command = uma transação do `IUnitOfWork`; command interno que falha desfaz o externo inteiro |
@@ -221,10 +222,12 @@ Autorização vem **antes** da validação (quem não tem acesso não descobre a
 | [📮 Mediator](docs/mediator.md) | Como enviar e publicar (`ISender`, `IPublisher`, `IMediator`); escopos em jobs e `BackgroundService` |
 | [🧱 Pipeline e behaviors](docs/pipeline-behaviors.md) | O que cada etapa faz, como escrever um behavior e um `IExceptionErrorMapper` |
 | [🔑 Autorização](docs/autorizacao.md) | `[AuthorizeRequest]`, `[AllowAnonymousRequest]`, `IRequestAuthorizer<T>`, `IPrincipalAccessor`, policies, TEC.Security |
+| [🎫 Permissões](docs/permissoes.md) | `[RequirePermission]` (todas ou qualquer uma), `IPermissionChecker` e teste de arquitetura |
 | [✅ Validação](docs/validacao.md) | Validação obrigatória, `IRequestValidator<T>`, `[SkipValidation]` e FluentValidation |
 | [📣 Notificações](docs/notificacoes.md) | `Publish` × `PublishAfterCommit`, ordem e polimorfismo dos handlers |
 | [💾 Transação](docs/transacao.md) | `IUnitOfWork`, `[SkipTransaction]`, commands aninhados e concorrência no escopo |
 | [🌐 ASP.NET Core](docs/aspnetcore.md) | `AddAspNetCore`, `ToHttpResult`/`ToCreatedHttpResult`, `UseTecExceptionHandler`, OpenAPI |
+| [🔁 Idempotência](docs/idempotencia.md) | `Idempotency-Key` com reserva: repetições e requisições simultâneas não executam duas vezes |
 | [📈 Observabilidade](docs/observabilidade.md) | Traces, métricas, eventos de log e as verificações de `CqrsDiagnostics` |
 | [⚙️ Opções e registro](docs/opcoes.md) | `AddTecCqrs`, `CqrsOptions`, `ICqrsBuilder` e as opções dos satélites |
 | [⚡ Native AOT](docs/aot.md) | Registro explícito, JSON com *source generator* e limitações |

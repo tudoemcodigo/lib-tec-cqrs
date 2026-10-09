@@ -26,6 +26,43 @@ internal static class RequestInfo<TRequest>
         [.. RequestMetadata.GetAuthorizeAttributes(typeof(TRequest)).Select(a => AuthorizeRule.From(typeof(TRequest), a))];
 
     public static readonly bool AllowAnonymous = RequestMetadata.Has<AllowAnonymousRequestAttribute>(typeof(TRequest));
+
+    /// <summary>Regras dos <see cref="RequirePermissionAttribute"/> (validadas; sem reflexão por requisição).</summary>
+    public static readonly PermissionRule[] PermissionRules =
+        [.. RequestMetadata.GetPermissionAttributes(typeof(TRequest)).Select(a => PermissionRule.From(typeof(TRequest), a))];
+}
+
+/// <summary>Um <see cref="RequirePermissionAttribute"/> pré-processado.</summary>
+/// <param name="Permissions">Permissões da regra (ao menos uma, sem repetição).</param>
+/// <param name="Match">Todas ou qualquer uma.</param>
+internal sealed record PermissionRule(string[] Permissions, PermissionMatch Match)
+{
+    /// <exception cref="InvalidOperationException">
+    /// Atributo sem permissões, com permissão em branco ou com <c>Match</c> inválido (a regra seria ignorada ou degradaria
+    /// para "qualquer usuário autenticado").
+    /// </exception>
+    public static PermissionRule From(Type requestType, RequirePermissionAttribute attribute)
+    {
+        if (attribute.Permissions.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"A requisição '{requestType.FullName}' possui [RequirePermission] sem permissões. Informe ao menos uma permissão.");
+        }
+
+        if (attribute.Permissions.Any(string.IsNullOrWhiteSpace))
+        {
+            throw new InvalidOperationException(
+                $"A requisição '{requestType.FullName}' possui [RequirePermission] com permissão em branco.");
+        }
+
+        if (!Enum.IsDefined(attribute.Mode))
+        {
+            throw new InvalidOperationException(
+                $"A requisição '{requestType.FullName}' possui [RequirePermission] com Mode inválido ({(int)attribute.Mode}).");
+        }
+
+        return new([.. attribute.Permissions.Distinct(StringComparer.Ordinal)], attribute.Mode);
+    }
 }
 
 /// <summary>Um <see cref="AuthorizeRequestAttribute"/> pré-processado.</summary>
@@ -75,20 +112,24 @@ internal static class RequestMetadata
     public static AuthorizeRequestAttribute[] GetAuthorizeAttributes(Type requestType) =>
         [.. requestType.GetCustomAttributes<AuthorizeRequestAttribute>(inherit: true)];
 
+    public static RequirePermissionAttribute[] GetPermissionAttributes(Type requestType) =>
+        [.. requestType.GetCustomAttributes<RequirePermissionAttribute>(inherit: true)];
+
     /// <summary>
-    /// A requisição declara como é autorizada: <see cref="AuthorizeRequestAttribute"/>, <see cref="AllowAnonymousRequestAttribute"/>
+    /// A requisição declara como é autorizada: <see cref="AuthorizeRequestAttribute"/>, <see cref="RequirePermissionAttribute"/>, <see cref="AllowAnonymousRequestAttribute"/>
     /// ou um <see cref="IRequestAuthorizer{TRequest}"/> registrado (inclusive para tipo base ou interface, ou genérico aberto).
     /// </summary>
     /// <param name="requestType">Tipo da requisição.</param>
     /// <param name="authorizers">Os <c>IRequestAuthorizer</c> registrados no container.</param>
     public static bool DeclaresAuthorization(Type requestType, RegisteredAuthorizers authorizers) =>
         GetAuthorizeAttributes(requestType).Length > 0
+        || GetPermissionAttributes(requestType).Length > 0
         || Has<AllowAnonymousRequestAttribute>(requestType)
         || authorizers.Authorizes(requestType);
 
     /// <summary>
     /// Falha na inicialização se o tipo de requisição tiver marcações contraditórias ou <c>[AuthorizeRequest]</c> com
-    /// <c>Roles</c>/<c>Policy</c> em branco.
+    /// <c>Roles</c>/<c>Policy</c> em branco ou <c>[RequirePermission]</c> sem permissões.
     /// </summary>
     public static void EnsureValid(Type requestType)
     {
@@ -110,6 +151,15 @@ internal static class RequestMetadata
             throw new InvalidOperationException(
                 $"A requisição '{requestType.FullName}' possui [AllowAnonymousRequest] e [AuthorizeRequest]. Use apenas um deles.");
         }
+
+        if (Has<AllowAnonymousRequestAttribute>(requestType) && GetPermissionAttributes(requestType).Length > 0)
+        {
+            throw new InvalidOperationException(
+                $"A requisição '{requestType.FullName}' possui [AllowAnonymousRequest] e [RequirePermission]. Use apenas um deles.");
+        }
+
+        foreach (var attribute in GetPermissionAttributes(requestType))
+            _ = PermissionRule.From(requestType, attribute);
 
         // Roles/Policy em branco: falha aqui, e não na primeira execução (montagem do RequestInfo)
         foreach (var attribute in GetAuthorizeAttributes(requestType))

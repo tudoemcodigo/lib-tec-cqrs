@@ -265,4 +265,4 @@ pacote cobrem o fluxo comum (200, 201 e as falhas).
 </details>
 
 ---
-⬅️ [💾 Transação](transacao.md) · [📚 Índice](README.md) · [📈 Observabilidade](observabilidade.md) ➡️
+⬅️ [💾 Transação](transacao.md) · [📚 Índice](README.md) · [🔁 Idempotência](idempotencia.md) ➡️

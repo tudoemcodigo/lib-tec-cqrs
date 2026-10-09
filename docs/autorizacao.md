@@ -58,6 +58,9 @@ contrário, o `AddTecCqrs` falha na subida listando as pendências.
 
 ## 🚀 Uso
 
+> [!TIP]
+> Para exigir **permissões** (e não papéis), use `[RequirePermission("pedidos:aprovar")]`, com regras "todas" ou "qualquer uma": ver [🎫 Permissões](permissoes.md).
+
 ### Atributos
 
 ```csharp
@@ -297,4 +300,4 @@ O pipeline usa `ClaimsPrincipal.IsInRole`, que lê o `RoleClaimType` da identida
 </details>
 
 ---
-⬅️ [🧱 Pipeline e behaviors](pipeline-behaviors.md) · [📚 Índice](README.md) · [✅ Validação](validacao.md) ➡️
+⬅️ [🧱 Pipeline e behaviors](pipeline-behaviors.md) · [📚 Índice](README.md) · [🎫 Permissões](permissoes.md) ➡️

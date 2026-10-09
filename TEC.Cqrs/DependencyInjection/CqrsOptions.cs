@@ -112,6 +112,25 @@ public sealed class CqrsOptions
     } = true;
 
     /// <summary>
+    /// Tipo de claim lido pelo <see cref="ClaimPermissionChecker"/> (o <see cref="IPermissionChecker"/> padrão) nas regras de
+    /// <see cref="RequirePermissionAttribute"/>. Padrão: <c>tec_perm</c>, o claim de permissão efetiva do TEC.Security.
+    /// </summary>
+    /// <exception cref="ArgumentException">Valor nulo, vazio ou só espaços.</exception>
+    public string PermissionClaimType
+    {
+        get;
+        set
+        {
+            EnsureNotFrozen();
+            ArgumentException.ThrowIfNullOrWhiteSpace(value, nameof(PermissionClaimType));
+            field = value;
+        }
+    } = DefaultPermissionClaimType;
+
+    /// <summary>Valor padrão de <see cref="PermissionClaimType"/>.</summary>
+    public const string DefaultPermissionClaimType = "tec_perm";
+
+    /// <summary>
     /// Inclui a mensagem e o stack trace das exceções no evento <c>exception</c> das <c>Activity</c>s (traces) de
     /// requisições e notificações. Padrão: <c>false</c> (o evento leva apenas <c>exception.type</c>).
     /// </summary>

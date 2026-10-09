@@ -11,7 +11,8 @@ namespace TEC.Cqrs.Behaviors;
 
 /// <summary>
 /// Autoriza a requisição antes da validação: primeiro os <see cref="AuthorizeRequestAttribute"/> (autenticação, papéis e
-/// policies), depois os <see cref="IRequestAuthorizer{TRequest}"/>. Negado, o pipeline retorna falha sem validar nem
+/// policies), depois os <see cref="RequirePermissionAttribute"/> (pelo <see cref="IPermissionChecker"/>) e por fim os
+/// <see cref="IRequestAuthorizer{TRequest}"/>. Negado, o pipeline retorna falha sem validar nem
 /// chamar o handler, sem revelar regras de validação a quem não tem acesso.
 /// </summary>
 /// <remarks>
@@ -33,23 +34,24 @@ internal sealed class AuthorizationBehavior<TRequest, TResponse>(CqrsOptions opt
     public async Task<TResponse> Handle(TRequest request, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken)
     {
         var rules = RequestInfo<TRequest>.AuthorizeRules;
+        var permissionRules = RequestInfo<TRequest>.PermissionRules;
         var authorizers = ResolveAuthorizers();
 
-        if (rules.Length == 0 && authorizers.Length == 0)
+        if (rules.Length == 0 && permissionRules.Length == 0 && authorizers.Length == 0)
         {
             // Fail closed: com RequireAuthorization, toda requisição precisa declarar como é autorizada
             if (options.RequireAuthorization && !RequestInfo<TRequest>.AllowAnonymous)
             {
                 throw new InvalidOperationException(
-                    $"A requisição '{typeof(TRequest).FullName}' não declara autorização. Use [AuthorizeRequest], " +
+                    $"A requisição '{typeof(TRequest).FullName}' não declara autorização. Use [AuthorizeRequest] ou [RequirePermission], " +
                     "crie um IRequestAuthorizer ou marque com [AllowAnonymousRequest].");
             }
 
             return await next(cancellationToken).ConfigureAwait(false);
         }
 
-        if (rules.Length > 0
-            && await AuthorizeAttributesAsync(request, rules, cancellationToken).ConfigureAwait(false) is { } denied)
+        if ((rules.Length > 0 || permissionRules.Length > 0)
+            && await AuthorizeAttributesAsync(request, rules, permissionRules, cancellationToken).ConfigureAwait(false) is { } denied)
         {
             return ResultFactory<TResponse>.Failure([denied]);
         }
@@ -92,7 +94,8 @@ internal sealed class AuthorizationBehavior<TRequest, TResponse>(CqrsOptions opt
     }
 
     /// <summary>Retorna o erro de negação, ou <c>null</c> se todas as regras forem atendidas.</summary>
-    private async Task<Error?> AuthorizeAttributesAsync(TRequest request, AuthorizeRule[] rules, CancellationToken cancellationToken)
+    private async Task<Error?> AuthorizeAttributesAsync(TRequest request, AuthorizeRule[] rules, PermissionRule[] permissionRules,
+        CancellationToken cancellationToken)
     {
         var principal = serviceProvider.GetService<IPrincipalAccessor>()?.Principal;
         if (principal?.Identity?.IsAuthenticated != true)
@@ -116,7 +119,37 @@ internal sealed class AuthorizationBehavior<TRequest, TResponse>(CqrsOptions opt
             }
         }
 
+        if (permissionRules.Length == 0)
+            return null;
+
+        var checker = serviceProvider.GetService<IPermissionChecker>()
+            ?? throw new InvalidOperationException(
+                $"A requisição '{typeof(TRequest).FullName}' usa [RequirePermission], mas nenhum IPermissionChecker está registrado.");
+
+        foreach (var rule in permissionRules)
+        {
+            if (!await SatisfiesAsync(checker, principal, rule, cancellationToken).ConfigureAwait(false))
+                return AccessDenied;
+        }
+
         return null;
+    }
+
+    private static async ValueTask<bool> SatisfiesAsync(IPermissionChecker checker, ClaimsPrincipal principal, PermissionRule rule,
+        CancellationToken cancellationToken)
+    {
+        bool any = rule.Match == PermissionMatch.Any;
+        foreach (var permission in rule.Permissions)
+        {
+            bool has = await checker.HasPermissionAsync(principal, permission, cancellationToken).ConfigureAwait(false);
+            if (any && has)
+                return true;
+            if (!any && !has)
+                return false;
+        }
+
+        // All: todas atendidas; Any: nenhuma atendida
+        return !any;
     }
 
     private static bool IsInAnyRole(ClaimsPrincipal principal, string[] roles)

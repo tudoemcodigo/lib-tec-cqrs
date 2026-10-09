@@ -32,8 +32,8 @@ public static class ServiceCollectionExtensions
     /// registrado direto no container antes do <c>AddTecCqrs</c> (use <see cref="CqrsOptions.AddBehavior"/>), mais de um handler para a mesma requisição,
     /// handler registrado direto no container com tempo de vida diferente de <c>Scoped</c>,
     /// requisição sem marcador de command/query ou com marcações contraditórias (command e query;
-    /// <c>[AllowAnonymousRequest]</c> e <c>[AuthorizeRequest]</c>), <c>[AuthorizeRequest]</c> com <c>Roles</c>/<c>Policy</c>
-    /// em branco, <see cref="IRequestAuthorizer{TRequest}"/> de tipo base ou interface registrado direto no container (nunca
+    /// <c>[AllowAnonymousRequest]</c> com <c>[AuthorizeRequest]</c> ou <c>[RequirePermission]</c>), <c>[AuthorizeRequest]</c> com <c>Roles</c>/<c>Policy</c>
+    /// em branco, <c>[RequirePermission]</c> sem permissões ou com permissão em branco, <see cref="IRequestAuthorizer{TRequest}"/> de tipo base ou interface registrado direto no container (nunca
     /// seria executado: use <see cref="CqrsOptions.AddRequestAuthorizer{TRequest, TAuthorizer}"/>),
     /// <see cref="IRequestValidator{TRequest}"/> cujo tipo não é uma requisição concreta conhecida (nunca seria executado) ou
     /// (com <see cref="CqrsOptions.RequireAuthorization"/>, o padrão) requisições sem autorização declarada, listadas na mensagem.
@@ -84,6 +84,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IMediator, Mediator>();
         services.AddScoped<ISender>(sp => sp.GetRequiredService<IMediator>());
         services.AddScoped<IPublisher>(sp => sp.GetRequiredService<IMediator>());
+        services.TryAddSingleton<IPermissionChecker, ClaimPermissionChecker>();
 
         // A ordem de registro define a ordem de execução (o primeiro é o mais externo).
         // Autorização antes da validação: quem não tem acesso não recebe detalhes das regras de validação.
@@ -249,7 +250,7 @@ public static class ServiceCollectionExtensions
 
         throw new InvalidOperationException(
             $"{missing.Count} requisição(ões) sem autorização declarada (CqrsOptions.RequireAuthorization está ativo). " +
-            "Use [AuthorizeRequest], crie um IRequestAuthorizer (do tipo, de um tipo base ou de uma interface) ou, se a " +
+            "Use [AuthorizeRequest] ou [RequirePermission], crie um IRequestAuthorizer (do tipo, de um tipo base ou de uma interface) ou, se a " +
             "requisição for pública, marque com [AllowAnonymousRequest]:" + Environment.NewLine + list);
     }
 
