@@ -126,6 +126,7 @@ Todos com `LoggerMessage` gerado em compilação:
 | 1011 | Warning | `Location` descartado (categoria `TEC.Cqrs.AspNetCore.ResultHttpExtensions`) |
 | 1012–1015 | Error/Debug/Warning | Tratamento de exceções no .NET 8 (categoria `TEC.Cqrs.AspNetCore.ExceptionHandler`) |
 | 1016 | Error | Publicação pós-commit interrompida após 10 rodadas |
+| 1017–1022 | Debug/Information/Warning | Idempotência HTTP: resposta repetida, chave em andamento (409), conteúdo diferente (422), resposta grande demais, reserva perdida, requisição sem usuário (categoria `TEC.Cqrs.AspNetCore.Idempotency.IdempotencyMiddleware`) |
 
 Cada falha gera **um único** registro: a exceção convertida (`AppException` ou mapper) é anexada ao log da falha interna,
 e uma exceção não tratada é registrada só na requisição mais interna em que ocorreu (nem as externas nem o
@@ -214,4 +215,4 @@ Não. Ele só emite pela BCL; o TEC.Observability (ou qualquer configuração de
 </details>
 
 ---
-⬅️ [🌐 ASP.NET Core](aspnetcore.md) · [📚 Índice](README.md) · [⚙️ Opções e registro](opcoes.md) ➡️
+⬅️ [🔁 Idempotência](idempotencia.md) · [📚 Índice](README.md) · [⚙️ Opções e registro](opcoes.md) ➡️

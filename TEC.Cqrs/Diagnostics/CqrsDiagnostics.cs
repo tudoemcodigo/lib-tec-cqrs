@@ -150,6 +150,25 @@ public static class CqrsDiagnostics
         return FindRequests(assemblies, type => !RequestMetadata.DeclaresAuthorization(type, authorizers));
     }
 
+    /// <summary>
+    /// Retorna as requisições dos assemblies informados sem <c>[RequirePermission]</c> e sem <c>[AllowAnonymousRequest]</c>.
+    /// Use em um teste de arquitetura quando a política da aplicação é "toda requisição declara as permissões exigidas"
+    /// (mais estrita que <see cref="FindRequestsWithoutAuthorization"/>, que aceita só autenticação).
+    /// </summary>
+    /// <remarks>
+    /// Requisições autorizadas só por <c>IRequestAuthorizer</c> aparecem na lista: dispense-as no teste, se for o caso.
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// Assert.Empty(CqrsDiagnostics.FindRequestsWithoutPermission(typeof(AbrirPedidoCommand).Assembly)
+    ///     .Except([typeof(ObterUsuarioAtualQuery)]));
+    /// </code>
+    /// </example>
+    [RequiresUnreferencedCode(TypeScanner.ScanningMessage)]
+    public static IReadOnlyList<Type> FindRequestsWithoutPermission(params IEnumerable<Assembly> assemblies) =>
+        FindRequests(assemblies, type =>
+            RequestMetadata.GetPermissionAttributes(type).Length == 0 && !RequestMetadata.Has<AllowAnonymousRequestAttribute>(type));
+
     /// <summary>Requisições concretas dos assemblies que atendem a <paramref name="predicate"/>, em ordem alfabética.</summary>
     [RequiresUnreferencedCode(TypeScanner.ScanningMessage)]
     private static Type[] FindRequests(IEnumerable<Assembly> assemblies, Func<Type, bool> predicate)

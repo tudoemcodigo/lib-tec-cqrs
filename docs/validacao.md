@@ -227,4 +227,4 @@ Num teste: `CqrsDiagnostics.FindCommandsWithoutValidator(services, typeof(Progra
 </details>
 
 ---
-⬅️ [🔑 Autorização](autorizacao.md) · [📚 Índice](README.md) · [📣 Notificações](notificacoes.md) ➡️
+⬅️ [🎫 Permissões](permissoes.md) · [📚 Índice](README.md) · [📣 Notificações](notificacoes.md) ➡️

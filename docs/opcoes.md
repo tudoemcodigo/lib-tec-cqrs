@@ -127,6 +127,7 @@ Não registra `IUnitOfWork`, `IPrincipalAccessor` nem `IRequestPolicyEvaluator`:
 | `SlowRequestThreshold` (`TimeSpan?`) | 500 ms | Aviso de lentidão (evento 1006). `null` desliga; zero ou negativo lança `ArgumentOutOfRangeException` |
 | `RequireValidatorForCommands` (`bool`) | `true` | Command sem validador nem `[SkipValidation]` lança `InvalidOperationException` ao ser executado |
 | `RequireAuthorization` (`bool`) | `true` | Toda requisição declara autorização; verificado na subida e no `Send` |
+| `PermissionClaimType` (`string`) | `tec_perm` | Claim lido pelo `ClaimPermissionChecker` nas regras de `[RequirePermission]` ([🎫 Permissões](permissoes.md)) |
 | `RecordExceptionDetailsInTraces` (`bool`) | `false` | Mensagem e stack trace das exceções nos traces |
 | `Assemblies` (`IReadOnlyList<Assembly>`) | vazio | Assemblies informados à varredura (usados também pelo `AddFluentValidation()`) |
 | `RegisterServicesFromAssembly(Assembly)` | — | Varre o assembly (reflexão); o mesmo assembly de novo é ignorado |
