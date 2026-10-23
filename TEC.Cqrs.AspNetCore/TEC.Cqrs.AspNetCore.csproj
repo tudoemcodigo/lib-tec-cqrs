@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Configurações de build, segurança, AOT e metadados comuns: ..\Directory.Build.props -->
+
+  <PropertyGroup>
+    <RootNamespace>TEC.Cqrs.AspNetCore</RootNamespace>
+    <Description>Conecta o TEC.Cqrs às APIs web: converte cada resultado em uma resposta padronizada com o status correto, trata erros sem expor detalhes e aplica o usuário e as permissões da requisição.</Description>
+    <PackageTags>cqrs;mediator;aspnetcore;minimal-api;openapi;tec</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TEC.Cqrs\TEC.Cqrs.csproj" />
+  </ItemGroup>
+
+  <!--
+    O TEC.Cqrs expõe os internos a este pacote (InternalsVisibleTo), inclusive o polyfill System.Threading.Lock do net8.0
+    (build/Polyfills). Uma segunda cópia compilada aqui conflitaria com a do núcleo (CS0436): este pacote usa a do núcleo.
+  -->
+  <ItemGroup>
+    <Compile Remove="$(TecRepoRoot)build/Polyfills/Lock.cs" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    API de exemplo que usa o TEC.Cqrs nos cenários típicos (commands e queries com autorização por papel, policy e dono
+    do recurso, validação com FluentValidation, transação, commands aninhados e notificações após o commit).
+    Serve de alvo para o gerador de carga (TEC.Cqrs.LoadGenerator) e para os testes de carga e segurança
+    (TEC.Cqrs.LoadTests). Não é publicada: IsPackable = false. Framework, lock file e auditoria em ../../Directory.Build.props.
+  -->
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\TEC.Cqrs\TEC.Cqrs.csproj" />
+    <ProjectReference Include="..\..\TEC.Cqrs.FluentValidation\TEC.Cqrs.FluentValidation.csproj" />
+    <ProjectReference Include="..\..\TEC.Cqrs.AspNetCore\TEC.Cqrs.AspNetCore.csproj" />
+  </ItemGroup>
+
+</Project>
