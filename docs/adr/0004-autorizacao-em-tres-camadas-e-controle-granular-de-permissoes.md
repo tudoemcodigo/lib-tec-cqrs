@@ -1,4 +1,4 @@
-[🏛️ TEC.Cqrs](../../README.md) ➔ [📖 Documentação](../README.md) ➔ [ADRs](README.md) ➔ ADR-0004
+[🏠 TEC.Cqrs](../../README.md) › [📚 Documentação](../README.md) › [🏛️ ADRs](README.md) › ADR-0004
 
 # ADR-0004: Autorização Declarativa em Três Níveis (Atributo, Permissão e Autorizador) com Fail-Closed
 
@@ -21,8 +21,8 @@ Implementou-se um modelo de autorização em **três níveis complementares**, o
    - Requisições sem `[AuthorizeRequest]`, `[RequirePermission]`, `IRequestAuthorizer<T>` ou o escape deliberado `[AllowAnonymousRequest]` causam falha imediata na inicialização da aplicação (`EnsureAuthorizationIsDeclared`).
 2. **Três Camadas de Avaliação no `AuthorizationBehavior`:**
    - **Nível 1: Atributo Declarativo (`[AuthorizeRequest]`):** Avalia autenticação, papéis exigidos (`Roles = "Admin,Gerente"`) e políticas nomeadas (`Policy = "ExigeCertificado"` via `IRequestPolicyEvaluator`).
-   - **Nível 2: Permissões Granulares (`[RequirePermission]`):** Avalia permissões pontuais via `IPermissionChecker` (claim `tec_perm` ou verificação multi-tenant). Suporta modos `Match.All` (todas as permissões) e `Match.Any` (ao menos uma).
-   - **Nível 3: Autorizador Contextual Baseado em Dados (`IRequestAuthorizer<TRequest>`):** Executado após a validação de atributos. Permite que classes de autorização acessem o payload da requisição e repositórios para impedir ataques BOLA/IDOR (ex.: validar posse do recurso).
+   - **Nível 2: Permissões Granulares (`[RequirePermission]`):** Avalia permissões pontuais via `IPermissionChecker` (claim `tec_perm` por padrão, ou uma implementação própria registrada depois do `AddTecCqrs`). Cada atributo é uma regra e `Mode` define a combinação: `PermissionMatch.All` (todas as permissões, padrão) ou `PermissionMatch.Any` (ao menos uma).
+   - **Nível 3: Autorizador Contextual Baseado em Dados (`IRequestAuthorizer<TRequest>`):** Executado depois dos atributos e antes da validação de entrada. Permite que classes de autorização acessem o payload da requisição e repositórios para impedir ataques BOLA/IDOR (ex.: validar posse do recurso). Sem atributo, o authorizer sozinho já conta como autorização declarada e exige usuário autenticado (`AuthorizersRequireAuthentication`, padrão `true`); authorizers de tipo base ou interface valem para todas as requisições que os implementam.
 3. **Isolamento de Identidades Autenticadas:**
    - Permissões e papéis são extraídos exclusivamente de instâncias de `ClaimsIdentity` onde `IsAuthenticated == true`. Identidades não autenticadas agregadas ao `ClaimsPrincipal` são explicitamente ignoradas.
 
@@ -41,3 +41,6 @@ Implementou-se um modelo de autorização em **três níveis complementares**, o
 - Livro *CQRS na Prática*, Capítulo 22: *Segurança em aplicações CQRS*.
 - OWASP API Security Top 10 (2023): API1 (BOLA) e API5 (BFLA).
 - Código: `TEC.Cqrs.Authorization.*`, `TEC.Cqrs.Behaviors.AuthorizationBehavior`.
+
+---
+⬅️ [ADR-0003](0003-pipeline-estrito-de-comportamentos-e-fail-closed.md) · [🏛️ Índice de ADRs](README.md) · [ADR-0005](0005-validacao-obrigatoria-de-comandos-e-integracao-fluentvalidation.md) ➡️

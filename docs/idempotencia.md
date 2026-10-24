@@ -61,7 +61,7 @@ Regras:
 | Chave nova | Executa; guarda a resposta **2xx** (com `Location`, `ETag`...) |
 | Mesma chave e mesmo conteúdo, concluída | Devolve a resposta guardada + `Idempotent-Replayed: true` (não executa) |
 | Mesma chave, outra execução em andamento | **409** `IDEMPOTENCIA_EM_ANDAMENTO` (tente de novo em instantes) |
-| Mesma chave com outro conteúdo (método, caminho, query ou corpo) | **422** `IDEMPOTENCY_KEY_REUTILIZADA` |
+| Mesma chave com outro conteúdo (método, caminho, query, corpo ou cabeçalhos de `HashedRequestHeaders`) | **422** `IDEMPOTENCY_KEY_REUTILIZADA` |
 | Resposta não 2xx ou exceção | Não guarda e **libera** a chave (o cliente pode tentar de novo) |
 | Cliente desconecta depois da resposta 2xx | A resposta já foi guardada antes do envio: a repetição recebe a resposta guardada |
 | Cliente desconecta e o endpoint é cancelado (`OperationCanceledException`) depois de status 2xx | A reserva é **mantida** até o `LockTimeout` (a operação pode ter sido confirmada): a repetição recebe 409 até lá |
@@ -134,9 +134,8 @@ Implemente `IIdempotencyStore` (ex.: Redis com `SET NX PX`). Contrato:
   verifica o pedido).
 
 > [!NOTE]
-> O `EfIdempotencyStore` do TEC.ORM ainda usa a collation padrão do banco nas colunas `Scope`/`IdempotencyKey`
-> (pendência registrada no TEC.ORM). O escopo gerado pelo middleware é um hash hexadecimal (sem diferença de maiúsculas),
-> mas chaves enviadas pelo cliente que diferem só em maiúsculas colidem nesse store.
+> O `EfIdempotencyStore` do TEC.ORM (`TEC.ORM.SqlServer`) já usa a collation binária `Latin1_General_100_BIN2` nas colunas
+> `Scope`/`IdempotencyKey`, com o mesmo comportamento ordinal do store em memória.
 
 ---
 
@@ -166,16 +165,12 @@ Implemente `IIdempotencyStore` (ex.: Redis com `SET NX PX`). Contrato:
 });
 ```
 
-> [!WARNING]
-> A 0.2.0 mudou o formato do escopo (hash de tipo, emissor e valor do claim, em vez do valor). As respostas guardadas pela
-> 0.1.0 não são mais encontradas: uma repetição feita logo após a atualização executa a operação de novo.
-
 ## ❌ Erros
 
 | Código | HTTP | Quando ocorre | O que fazer |
 |---|---|---|---|
 | `IDEMPOTENCY_KEY_OBRIGATORIA` | 400 | Endpoint com `keyRequired` sem o cabeçalho | Envie a chave (ex.: um GUID por operação) |
-| `IDEMPOTENCY_KEY_INVALIDA` | 400 | Vários valores (inclusive com o primeiro vazio), longa demais ou com caracteres de controle | Envie um único valor curto |
+| `IDEMPOTENCY_KEY_INVALIDA` | 400 | Vários valores (inclusive com o primeiro vazio), só espaços, longa demais ou com caracteres de controle | Envie um único valor curto |
 | `NAO_AUTENTICADO` | 401 | Endpoint com `keyRequired` chamado sem usuário autenticado | Autentique-se |
 | `IDEMPOTENCIA_SEM_ESCOPO` | 500 | Endpoint com `keyRequired` e usuário autenticado sem nenhum dos `UserIdClaimTypes` (ex.: API key) | Inclua o claim do esquema em `UserIdClaimTypes` |
 | `IDEMPOTENCIA_CORPO_EXCEDE_LIMITE` | 413 | Corpo maior que `MaxRequestBodyBytes` | Aumente o limite ou reduza o corpo |

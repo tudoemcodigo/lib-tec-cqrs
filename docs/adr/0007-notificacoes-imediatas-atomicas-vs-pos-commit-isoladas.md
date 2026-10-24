@@ -1,4 +1,4 @@
-[🏛️ TEC.Cqrs](../../README.md) ➔ [📖 Documentação](../README.md) ➔ [ADRs](README.md) ➔ ADR-0007
+[🏠 TEC.Cqrs](../../README.md) › [📚 Documentação](../README.md) › [🏛️ ADRs](README.md) › ADR-0007
 
 # ADR-0007: Notificações Imediatas Atômicas vs Pós-Commit com Garantia de Isolamento e Resiliência
 
@@ -26,9 +26,9 @@ A interface `IPublisher` separa formalmente duas modalidades de publicação com
    - Se o comando falhar ou a transação sofrer rollback, a fila inteira é sumariamente descartada.
    - Somente após a confirmação bem-sucedida da transação (`Committed == true`), o `Mediator` despacha as notificações acumuladas.
 3. **Isolamento de Falhas e Tolerância (*Fail-Safe* Pós-Commit):**
-   - Na publicação pós-commit (`PublishIsolatedAsync`), cada handler é executado isoladamente. Falhas individuais são registradas em log com nível de erro (`DeferredNotificationFailed`, evento 1011) e telemetria, **sem interromper** os demais handlers e **sem alterar** o resultado já confirmado retornado ao chamador.
+   - Na publicação pós-commit (`PublishIsolatedAsync`), cada handler é executado isoladamente. Falhas individuais são registradas em log com nível de erro (`DeferredNotificationFailed`, evento 1008; falha ao criar os handlers: evento 1009) e telemetria, **sem interromper** os demais handlers e **sem alterar** o resultado já confirmado retornado ao chamador.
 4. **Proteção Contra Recursão Excessiva (`MaxDeferredRounds`):**
-   - Se um handler pós-commit enfileirar novas notificações pós-commit, o mediator processa em rodadas sucessivas até o limite de segurança de 10 rodadas (`MaxDeferredRounds = 10`). Ultrapassado o teto, o loop é interrompido com log de aviso (`DeferredNotificationRoundsExceeded`, evento 1016), prevenindo estouro de pilha.
+   - Se um handler pós-commit enfileirar novas notificações pós-commit, o mediator processa em rodadas sucessivas até o limite de segurança de 10 rodadas (`MaxDeferredRounds = 10`). Ultrapassado o teto, o laço é interrompido com log de erro (`DeferredNotificationRoundsExceeded`, evento 1016) e as notificações restantes são descartadas, prevenindo laço infinito.
 5. **Deduplicação Inteligente por Hierarquia:**
    - Handlers registrados para interfaces ou classes base (`INotificationHandler<IEventoBase>`) são executados em ordem determinística (tipo concreto -> bases -> interfaces), executando exatamente uma vez por publicação para cada classe de handler.
 
@@ -46,3 +46,6 @@ A interface `IPublisher` separa formalmente duas modalidades de publicação com
 - Livro *CQRS na Prática*, Capítulo 12: *Notificações e eventos de domínio*.
 - Livro *CQRS na Prática*, Capítulo 15: *Outbox, inbox, mensageria e idempotência*.
 - Código: `TEC.Cqrs.Abstractions.IPublisher`, `TEC.Cqrs.Internal.Mediator`, `TEC.Cqrs.Internal.NotificationPublisher`.
+
+---
+⬅️ [ADR-0006](0006-gestao-transacional-com-comandos-aninhados-e-rollback-only.md) · [🏛️ Índice de ADRs](README.md) · [ADR-0008](0008-idempotencia-http-com-reserva-concorrente-e-hash-criptografico.md) ➡️

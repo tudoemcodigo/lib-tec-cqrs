@@ -30,8 +30,11 @@ namespace TEC.Cqrs.Persistence;
 ///         await db.Database.CommitTransactionAsync(cancellationToken);
 ///     }
 ///
-///     public Task RollbackAsync(CancellationToken cancellationToken) =>
-///         db.Database.RollbackTransactionAsync(cancellationToken);
+///     public async Task RollbackAsync(CancellationToken cancellationToken)
+///     {
+///         db.ChangeTracker.Clear();
+///         await db.Database.RollbackTransactionAsync(cancellationToken);
+///     }
 /// }
 ///
 /// services.AddScoped&lt;IUnitOfWork, EfUnitOfWork&gt;();
@@ -48,6 +51,6 @@ public interface IUnitOfWork
     /// <summary>Persiste as alterações pendentes e confirma a transação.</summary>
     Task CommitAsync(CancellationToken cancellationToken);
 
-    /// <summary>Desfaz a transação.</summary>
+    /// <summary>Desfaz a transação e limpa quaisquer alterações pendentes no rastreador de entidades.</summary>
     Task RollbackAsync(CancellationToken cancellationToken);
 }

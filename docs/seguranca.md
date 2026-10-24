@@ -166,7 +166,7 @@ return Error.Failure("FALHA_BANCO", "Falha ao gravar o cliente.");
 | Situação de segurança | Resultado |
 |---|---|
 | Usuário ausente | 401 `NAO_AUTENTICADO` |
-| Sem papel / policy reprovada | 403 `ACESSO_NEGADO` |
+| Sem papel, policy reprovada ou permissão faltando | 403 `ACESSO_NEGADO` |
 | Recurso de outro usuário (authorizer) | O erro escolhido pelo authorizer (ex.: 404) |
 | Declaração ausente ou inválida | `InvalidOperationException` na inicialização |
 | Avaliador de policy ausente | `InvalidOperationException` na execução |

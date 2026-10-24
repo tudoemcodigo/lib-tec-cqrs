@@ -1,4 +1,4 @@
-[🏛️ TEC.Cqrs](../../README.md) ➔ [📖 Documentação](../README.md) ➔ [ADRs](README.md) ➔ ADR-0008
+[🏠 TEC.Cqrs](../../README.md) › [📚 Documentação](../README.md) › [🏛️ ADRs](README.md) › ADR-0008
 
 # ADR-0008: Idempotência HTTP por Chave de Cabeçalho com Reserva Concorrente, Escopo Criptográfico e Tolerância a Desconexões
 
@@ -43,15 +43,18 @@ Criou-se uma arquitetura completa de idempotência no pacote `TEC.Cqrs.AspNetCor
 ### Positivas
 - **Segurança Operacional Total:** Pagamentos e mutações críticas não duplicam mesmo sob quedas de rede severas.
 - **Proteção Multi-Tenant Nativa:** Chaves duplicadas entre tenants distintos não colidem nem vazam dados.
-- **Conformidade com Padrões IETF:** Alinhado às melhores práticas globais de APIs financeiras e e-commerce.
+- **Alinhamento ao Rascunho IETF:** Segue o cabeçalho `Idempotency-Key` descrito no rascunho *The Idempotency-Key HTTP Header Field*.
 
 ### Negativas / Limitações
 - **Memória de Buffer:** Respostas armazenadas temporariamente em memória utilizam até `MaxResponseBodyBytes` (padrão 1 MiB). Respostas acima desse limite sofrem bypass de armazenamento e emitem alerta.
-- **Múltiplas Instâncias:** O `InMemoryIdempotencyStore` destina-se a desenvolvimento e nós únicos; clusters com múltiplas instâncias requerem armazenamento centralizado (ex.: `EfIdempotencyStore` com Redis ou PostgreSQL).
+- **Múltiplas Instâncias:** O `InMemoryIdempotencyStore` destina-se a desenvolvimento e nós únicos; clusters com múltiplas instâncias requerem armazenamento compartilhado (ex.: o `EfIdempotencyStore` do `TEC.ORM.SqlServer` ou um `IIdempotencyStore` próprio, como um store em Redis).
 
 ## Referências
 - Livro *CQRS na Prática*, Capítulo 15: *Outbox, inbox, mensageria e idempotência*.
 - Livro *CQRS na Prática*, Capítulo 22: *Segurança em aplicações CQRS*.
-- Revisão Técnica TEC.Cqrs (2026-10-19): Achados A-01, M-02, M-03, B-02, B-04, B-05, B-07.
+- [Revisão Técnica TEC.Cqrs](../revisao-tecnica.md) (2026-10-19): Achados A-01, M-02, M-03, B-02, B-04, B-05, B-07.
 - IETF Draft: *The Idempotency-Key HTTP Header Field*.
 - Código: `TEC.Cqrs.Idempotency.*`, `TEC.Cqrs.AspNetCore.Idempotency.*`.
+
+---
+⬅️ [ADR-0007](0007-notificacoes-imediatas-atomicas-vs-pos-commit-isoladas.md) · [🏛️ Índice de ADRs](README.md) · [ADR-0009](0009-mapeamento-seguro-de-respostas-http-e-mascaramento-de-erros.md) ➡️

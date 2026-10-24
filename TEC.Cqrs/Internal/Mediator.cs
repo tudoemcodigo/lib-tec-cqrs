@@ -214,13 +214,27 @@ internal sealed class RequestHandlerWrapperImpl<TRequest, TResponse> : RequestHa
             }
             catch
             {
-                MarkEnclosingTransactionForRollback(frame, errors: null);
+                if (frame.Transaction is { Committed: true })
+                {
+                    await PublishDeferredAsync(frame, serviceProvider).ConfigureAwait(false);
+                }
+                else
+                {
+                    MarkEnclosingTransactionForRollback(frame, errors: null);
+                }
                 throw;
             }
 
             if (response.IsFailure)
             {
-                MarkEnclosingTransactionForRollback(frame, response.Errors);
+                if (frame.Transaction is { Committed: true })
+                {
+                    await PublishDeferredAsync(frame, serviceProvider).ConfigureAwait(false);
+                }
+                else
+                {
+                    MarkEnclosingTransactionForRollback(frame, response.Errors);
+                }
                 return response;
             }
 

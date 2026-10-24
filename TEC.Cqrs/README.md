@@ -17,11 +17,12 @@ com handlers que retornam `Result`/`Result<T>` do TEC.Core, e um pipeline em ord
 
 **Logging → Exceções → Autorização → Validação → behaviors próprios → Performance → Transação → Handler**
 
-- **Autorização obrigatória** (`[AuthorizeRequest]`, `IRequestAuthorizer<T>` ou `[AllowAnonymousRequest]`), verificada na subida.
+- **Autorização obrigatória** (`[AuthorizeRequest]`, `[RequirePermission]`, `IRequestAuthorizer<T>` ou `[AllowAnonymousRequest]`), verificada na subida.
 - **Validação obrigatória** de commands (`IRequestValidator<T>` ou `[SkipValidation]`), fail closed.
 - **Transação por command** com o seu `IUnitOfWork`; command interno que falha desfaz o externo.
 - **`PublishAfterCommit`**: eventos publicados só depois do commit, descartados em falha.
 - **Telemetria** pelo `ActivitySource` e `Meter` `TEC.Cqrs`, sem o conteúdo das requisições.
+- **Idempotência**: contrato `IIdempotencyStore` e `InMemoryIdempotencyStore` (o middleware HTTP está no `TEC.Cqrs.AspNetCore`).
 - Sem ASP.NET Core e sem FluentValidation: serve a APIs, workers, jobs e mensageria. Compatível com Native AOT.
 
 ## 🎯 Quando usar
@@ -69,7 +70,7 @@ Result<int> closed = await sender.Send(new CloseDayCommand(DateOnly.FromDateTime
 
 ## 📚 Documentação
 
-Commands e queries, mediator, pipeline, autorização, validação, notificações, transação, observabilidade, opções e Native
-AOT: [docs/README.md](https://github.com/tudoemcodigo/lib-tec-cqrs/blob/main/docs/README.md).
+Commands e queries, mediator, pipeline, autorização, permissões, validação, notificações, transação, idempotência,
+observabilidade, opções e Native AOT: [docs/README.md](https://github.com/tudoemcodigo/lib-tec-cqrs/blob/main/docs/README.md).
 
 `net8.0` e `net10.0` · Native AOT · [MIT](https://github.com/tudoemcodigo/lib-tec-cqrs/blob/main/LICENSE) · Roberto Oliveira, equipe Tudo em Código

@@ -38,7 +38,7 @@ flowchart LR
 
 | Projeto | Categoria | Conteúdo | Quantidade |
 |---|---|---|---:|
-| `TEC.Cqrs.Tests` | *(sem categoria)* | Mediator, pipeline, transação, segurança, robustez, regressão, observabilidade, HTTP e divisão dos pacotes | 209 (`net10.0`) · 216 (`net8.0`) |
+| `TEC.Cqrs.Tests` | *(sem categoria)* | Mediator, pipeline, transação, segurança, permissões, idempotência, robustez, regressão, observabilidade, HTTP e divisão dos pacotes | 280 (`net10.0`) · 287 (`net8.0`) |
 | `TEC.Cqrs.LoadTests` | `Carga-CI` | Concorrência, alocação por `Send`, segurança sob carga e fumaça HTTP na API de exemplo | 13 |
 | `TEC.Cqrs.LoadTests` | `Carga-Pesada` | Vazão, volume, soak e carga sustentada na API de exemplo (`[Explicit]`) | 7 (~4–5 min com fator 1) |
 
@@ -91,6 +91,8 @@ TEC_CARGA_FATOR=0.1 TEC_CARGA_RELATORIOS=./relatorios \
 | `MediatorTests.cs` | `Send` e `Publish`, validação que interrompe o pipeline, conversão de `AppException`, behaviors próprios, erros de registro |
 | `TransactionTests.cs` | Commit/rollback, falha no commit, query e `[SkipTransaction]` sem transação, command aninhado, sem `IUnitOfWork` |
 | `SecurityTests.cs` | Autorização (atributos, authorizers, policies), validação obrigatória, verificações de inicialização, vazamento de dados |
+| `PermissionTests.cs` | `[RequirePermission]` (todas e qualquer uma), `IPermissionChecker`, claim configurável, `FindRequestsWithoutPermission` |
+| `IdempotencyTests.cs` | `InMemoryIdempotencyStore` (reserva, expiração, cotas) e `IdempotencyMiddleware` (repetição, concorrência, escopo, limites) |
 | `HardeningTests.cs` | Commands internos em paralelo, ciclo de `PublishAfterCommit`, transação aberta fora do pipeline, behaviors antes/depois do `AddTecCqrs`, regras assíncronas, `IPrincipalAccessor` × `AddAspNetCore` |
 | `RobustnessTests.cs` | `[SkipTransaction]` aninhado, transação perdida, registros keyed, authorizers genéricos abertos, handler `Singleton`, `ISender` do provider raiz |
 | `RegressionTests.cs` | Erros sem duplicidade, handlers de interface, opções congeladas, um log por exceção, cancelamento, tipos que não carregam |

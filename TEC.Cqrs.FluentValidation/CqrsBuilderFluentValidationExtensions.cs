@@ -90,10 +90,32 @@ public static class CqrsBuilderFluentValidationExtensions
         foreach (var descriptor in options.Adapters)
             services.TryAddEnumerable(descriptor);
 
+        // Adapta também quaisquer validadores IValidator<T> já presentes no container para requisições
+        var existingApplied = RegisteredServices.GetGenericArguments(services, typeof(IRequestValidator<>));
+        AdaptExistingValidators(services, existingApplied);
+
         EnsureValidatorsAreApplied(services, options.ScannedRequests);
 
         options.Freeze();
         return builder;
+    }
+
+    [System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("AOT", "IL2055", Justification = "Adaptação de validadores existentes.")]
+    [System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Adaptação de validadores existentes.")]
+    [System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("AOT", "IL2062", Justification = "Adaptação de validadores existentes.")]
+    private static void AdaptExistingValidators(IServiceCollection services, ISet<Type> existingApplied)
+    {
+        foreach (var descriptor in services.Where(s => s.ServiceType.IsGenericType && s.ServiceType.GetGenericTypeDefinition() == typeof(global::FluentValidation.IValidator<>)).ToList())
+        {
+            var targetType = descriptor.ServiceType.GetGenericArguments()[0];
+            if (typeof(IBaseRequest).IsAssignableFrom(targetType) && !existingApplied.Contains(targetType))
+            {
+                var adapterType = typeof(global::TEC.Cqrs.FluentValidation.Internal.FluentValidationRequestValidator<>).MakeGenericType(targetType);
+                var validatorInterface = typeof(IRequestValidator<>).MakeGenericType(targetType);
+                services.TryAddEnumerable(ServiceDescriptor.Scoped(validatorInterface, adapterType));
+                existingApplied.Add(targetType);
+            }
+        }
     }
 
     /// <summary>

@@ -1,4 +1,4 @@
-[🏛️ TEC.Cqrs](../../README.md) ➔ [📖 Documentação](../README.md) ➔ [ADRs](README.md) ➔ ADR-0001
+[🏠 TEC.Cqrs](../../README.md) › [📚 Documentação](../README.md) › [🏛️ ADRs](README.md) › ADR-0001
 
 # ADR-0001: Mediator In-Process com Despacho Pré-Compilado e Zero Reflexão no Caminho Quente
 
@@ -24,7 +24,7 @@ Adotou-se o padrão Mediator in-process arquitetado com três decisões nucleare
    - `IMediator`: Composição que unifica ambos quando o ponto de entrada necessita dos dois comportamentos.
 2. **Wrappers Pré-Compilados e CqrsRegistry:**
    - Durante a inicialização (`AddTecCqrs`), as instâncias especializadas de `RequestHandlerWrapper<TResponse>` e `NotificationTarget` são criadas e armazenadas no registro imutável `CqrsRegistry`.
-   - O `Mediator.Send` consulta o `CqrsRegistry` pelo tipo em tempo de execução (busca em `Dictionary` thread-safe) e invoca diretamente o wrapper tipado `RequestHandlerWrapperImpl<TRequest, TResponse>.Handle`, eliminando qualquer chamada reflexiva no caminho de despacho.
+   - O `Mediator.Send` consulta o `CqrsRegistry` pelo tipo em tempo de execução (busca em `FrozenDictionary` montado no registro) e invoca diretamente o wrapper tipado `RequestHandlerWrapperImpl<TRequest, TResponse>.Handle`, eliminando qualquer chamada reflexiva no caminho de despacho.
 3. **Resolução de Handlers em Tempo de Vida Scoped:**
    - Handlers de requisição e notificação são sempre registrados como `Scoped`. Resoluções do mediator criam o pipeline isolado por escopo de requisição, garantindo isolamento de estado e contexto de transação.
 
@@ -42,3 +42,6 @@ Adotou-se o padrão Mediator in-process arquitetado com três decisões nucleare
 - Livro *CQRS na Prática*, Capítulo 06: *O padrão Mediator e o despacho*.
 - Livro *CQRS na Prática*, Capítulo 21: *Performance, Native AOT e source generators*.
 - Código: `TEC.Cqrs.Abstractions.ISender`, `TEC.Cqrs.Abstractions.IMediator`, `TEC.Cqrs.Internal.Mediator`, `TEC.Cqrs.Internal.CqrsRegistry`.
+
+---
+[🏛️ Índice de ADRs](README.md) · [ADR-0002](0002-result-pattern-obrigatorio-em-todas-as-requisicoes.md) ➡️

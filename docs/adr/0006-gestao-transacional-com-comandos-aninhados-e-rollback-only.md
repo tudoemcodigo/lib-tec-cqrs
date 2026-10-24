@@ -1,4 +1,4 @@
-[🏛️ TEC.Cqrs](../../README.md) ➔ [📖 Documentação](../README.md) ➔ [ADRs](README.md) ➔ ADR-0006
+[🏠 TEC.Cqrs](../../README.md) › [📚 Documentação](../README.md) › [🏛️ ADRs](README.md) › ADR-0006
 
 # ADR-0006: Gestão Transacional Automática com Suporte a Comandos Aninhados e Marcação Rollback-Only
 
@@ -24,7 +24,7 @@ Criou-se uma arquitetura transacional robusta no `TransactionBehavior`, coordena
    - Comandos internos detectam a transação ativa do frame pai e participam dela, sem abrir uma segunda transação.
 3. **Mecanismo Atômico Rollback-Only:**
    - Se um comando interno falhar (retornar `Result.Failure` ou lançar exceção), a transação compartilhada é marcada irrevogavelmente como `Rollback-Only` (`transaction.MarkRollbackOnly(...)`).
-   - Mesmo que o comando externo intercepte a falha e tente retornar sucesso, o `TransactionBehavior` bloqueia o commit, efetua o rollback completo e retorna erro `TRANSACAO_DESFEITA` acompanhado dos erros originais do comando interno.
+   - Mesmo que o comando externo intercepte a falha e tente retornar sucesso, o `TransactionBehavior` bloqueia o commit, efetua o rollback completo e retorna falha com os erros do comando interno (ou `TRANSACAO_DESFEITA`, se o interno lançou exceção).
 4. **Proteção Contra Concorrência no Escopo:**
    - O `PipelineContext` impede múltiplos `Send` simultâneos na mesma transação. Se `Task.WhenAll` for utilizado para comandos internos, o mediator lança `InvalidOperationException` imediatamente para impedir a corrupção do `DbContext`.
 5. **Commit e Rollback Resilientes com `CancellationToken.None`:**
@@ -33,7 +33,7 @@ Criou-se uma arquitetura transacional robusta no `TransactionBehavior`, coordena
 ## Consequências
 
 ### Positivas
-- **Garantia ACID Absoluta:** Impossível ocorrer gravação pela metade ou confirmação de estado corrompido em cenários aninhados.
+- **Sem Gravação Parcial:** Um comando interno que falha impede o commit da transação externa, mesmo que o handler externo trate a falha.
 - **Prevenção de Corrupção Concorrente:** Proteção ativa contra uso indevido de chamadas paralelas em instâncias com `DbContext`.
 - **Desacoplamento de ORM:** O `TEC.Cqrs` interage unicamente com a abstração `IUnitOfWork`, funcionando de forma idêntica com EF Core, Dapper ou ADO.NET puro.
 
@@ -43,3 +43,6 @@ Criou-se uma arquitetura transacional robusta no `TransactionBehavior`, coordena
 ## Referências
 - Livro *CQRS na Prática*, Capítulo 11: *Transações e Unit of Work*.
 - Código: `TEC.Cqrs.Persistence.IUnitOfWork`, `TEC.Cqrs.Behaviors.TransactionBehavior`, `TEC.Cqrs.Internal.PipelineContext`.
+
+---
+⬅️ [ADR-0005](0005-validacao-obrigatoria-de-comandos-e-integracao-fluentvalidation.md) · [🏛️ Índice de ADRs](README.md) · [ADR-0007](0007-notificacoes-imediatas-atomicas-vs-pos-commit-isoladas.md) ➡️

@@ -1,4 +1,4 @@
-[🏛️ TEC.Cqrs](../../README.md) ➔ [📖 Documentação](../README.md) ➔ [ADRs](README.md) ➔ ADR-0002
+[🏠 TEC.Cqrs](../../README.md) › [📚 Documentação](../README.md) › [🏛️ ADRs](README.md) › ADR-0002
 
 # ADR-0002: Encapsulamento Obrigatório de Resposta em Result Pattern e Repúdio a Exceções para Fluxo
 
@@ -44,3 +44,6 @@ Decidiu-se que **toda e qualquer requisição processada pelo TEC.Cqrs deve obri
 - Livro *CQRS na Prática*, Capítulo 07: *Result pattern e erros*.
 - ADR-0001 do `TEC.Core`: *Adoção do Result Pattern em Substituição a Exceções para Controle de Fluxo*.
 - Código: `TEC.Cqrs.Abstractions.IRequest`, `TEC.Cqrs.Behaviors.ValidationBehavior`, `TEC.Cqrs.Behaviors.ExceptionBehavior`.
+
+---
+⬅️ [ADR-0001](0001-mediator-in-process-e-despacho-pre-compilado.md) · [🏛️ Índice de ADRs](README.md) · [ADR-0003](0003-pipeline-estrito-de-comportamentos-e-fail-closed.md) ➡️

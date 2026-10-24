@@ -47,6 +47,7 @@ flowchart LR
 | `ResultHttpExtensions` | `TEC.Cqrs.AspNetCore` | `ToHttpResult` e `ToCreatedHttpResult` |
 | `ApiResponseHttpResult<TResponse>` / `ApiResponseCreatedHttpResult<T>` | `TEC.Cqrs.AspNetCore` | Resultados HTTP (`IResult` e `IActionResult`) com metadados OpenAPI |
 | `ApplicationBuilderExtensions.UseTecExceptionHandler` | `TEC.Cqrs.AspNetCore` | Tratamento global de exceções |
+| `AddIdempotency`, `UseTecIdempotency`, `.WithIdempotency()` | `TEC.Cqrs.AspNetCore` (`.Idempotency`) | Idempotência por `Idempotency-Key` ([🔁 Idempotência](idempotencia.md)) |
 
 > [!IMPORTANT]
 > Use o `TEC.Cqrs.AspNetCore` **na mesma versão** do `TEC.Cqrs` (e do `TEC.Cqrs.FluentValidation`): ele usa tipos

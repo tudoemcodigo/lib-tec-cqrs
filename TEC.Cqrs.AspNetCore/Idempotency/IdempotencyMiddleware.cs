@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using TEC.Core.Common.Results;
@@ -10,6 +11,7 @@ using TEC.Core.Exceptions;
 using TEC.Core.Responses;
 using TEC.Cqrs.AspNetCore.Internal;
 using TEC.Cqrs.Idempotency;
+using TEC.Cqrs.Internal;
 
 namespace TEC.Cqrs.AspNetCore.Idempotency;
 
@@ -124,22 +126,27 @@ internal sealed class IdempotencyMiddleware(RequestDelegate next, IOptions<Idemp
         var capture = new CaptureStream(original, _options.MaxResponseBodyBytes);
         await using var disposeCapture = capture.ConfigureAwait(false);
         context.Response.Body = capture;
+        bool isCommitted = false;
         try
         {
             await next(context).ConfigureAwait(false);
+            isCommitted = context.RequestServices.GetService<PipelineContext>()?.HasCommittedTransaction == true;
         }
         catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested
-                                                 && context.Response.StatusCode is >= 200 and <= 299)
+                                                 && (isCommitted || context.RequestServices.GetService<PipelineContext>()?.HasCommittedTransaction == true || context.Response.StatusCode is >= 200 and <= 299))
         {
-            // O cliente desconectou e a operação pode ter sido confirmada: a reserva é mantida (a repetição recebe 409 até o
+            // O cliente desconectou e a operação foi confirmada: a reserva é mantida (a repetição recebe 409 até o
             // LockTimeout), em vez de liberar a chave e arriscar executar de novo
             IdempotencyLog.AbortedAfterSuccess(logger);
             throw;
         }
         catch
         {
-            // A chave é liberada: o cliente pode tentar de novo
-            await store.AbandonAsync(key, lockId, CancellationToken.None).ConfigureAwait(false);
+            // A chave só é liberada se a transação ainda não tiver sido confirmada
+            if (!isCommitted && context.RequestServices.GetService<PipelineContext>()?.HasCommittedTransaction != true)
+            {
+                await store.AbandonAsync(key, lockId, CancellationToken.None).ConfigureAwait(false);
+            }
             throw;
         }
         finally
@@ -147,12 +154,16 @@ internal sealed class IdempotencyMiddleware(RequestDelegate next, IOptions<Idemp
             context.Response.Body = original;
         }
 
+        isCommitted = isCommitted || context.RequestServices.GetService<PipelineContext>()?.HasCommittedTransaction == true;
         var status = context.Response.StatusCode;
         if (status is < 200 or > 299 || capture.Overflowed)
         {
             if (capture.Overflowed && status is >= 200 and <= 299)
                 IdempotencyLog.ResponseTooLarge(logger, _options.MaxResponseBodyBytes);
-            await store.AbandonAsync(key, lockId, CancellationToken.None).ConfigureAwait(false);
+
+            if (!isCommitted)
+                await store.AbandonAsync(key, lockId, CancellationToken.None).ConfigureAwait(false);
+
             await capture.SendBufferedAsync().ConfigureAwait(false);
             return;
         }

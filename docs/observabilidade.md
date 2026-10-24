@@ -144,6 +144,7 @@ Métodos de `CqrsDiagnostics` (usam reflexão: só em testes):
 | `FindRequestsWithoutHandler(services, assemblies)` | Requisições dos assemblies sem handler registrado |
 | `FindCommandsWithoutValidator(services, assemblies)` | Commands sem validador e sem `[SkipValidation]` (os que falhariam com `RequireValidatorForCommands`) |
 | `FindRequestsWithoutAuthorization(services, assemblies)` | Requisições sem `[AuthorizeRequest]`, authorizer ou `[AllowAnonymousRequest]` |
+| `FindRequestsWithoutPermission(assemblies)` | Requisições sem `[RequirePermission]` e sem `[AllowAnonymousRequest]` (política estrita; ver [🎫 Permissões](permissoes.md)) |
 | `IsExceptionLogged(exception)` | Se a exceção já foi registrada pelo pipeline |
 
 ```csharp

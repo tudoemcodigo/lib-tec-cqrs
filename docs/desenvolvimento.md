@@ -63,7 +63,7 @@ flowchart LR
 
 | Item | Detalhe |
 |---|---|
-| SDK | .NET 10 (`global.json`: `10.0.100`, `rollForward: latestFeature`) e o runtime 8.0 para rodar os testes em `net8.0` |
+| SDK | .NET 10 (`global.json`: `10.0.401`, `rollForward: latestPatch`) e o runtime 8.0 para rodar os testes em `net8.0` |
 | Feed `tec-interno` | Leitura obrigatória no modo pacote, o padrão (PAT classic com `read:packages`; o GitHub Packages exige token mesmo para pacote público) |
 | Docker, Azure CLI | Não são necessários: o TEC.Cqrs não tem testes de integração externa |
 

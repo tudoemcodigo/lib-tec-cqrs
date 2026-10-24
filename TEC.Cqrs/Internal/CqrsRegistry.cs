@@ -66,8 +66,42 @@ internal sealed class CqrsRegistry
     public AuthorizerTarget[] GetAuthorizerTargets<TRequest>()
         where TRequest : IBaseRequest =>
         _authorizerCache.GetOrAdd(typeof(TRequest),
-            static (requestType, targets) => TargetOrder.Sort(targets.Append(AuthorizerTarget<TRequest>.Instance), t => t.TargetType, requestType),
+            static (requestType, targets) => TargetOrder.Sort(GetAllAuthorizerTargets<TRequest>(targets), t => t.TargetType, requestType),
             _authorizerTargets);
+
+    private static readonly ConcurrentDictionary<Type, AuthorizerTarget> DynamicAuthorizerTargets = new();
+
+    [UnconditionalSuppressMessage("AOT", "IL2090",
+        Justification = "Necessário para descobrir interfaces de IBaseRequest da requisição.")]
+    private static IEnumerable<AuthorizerTarget> GetAllAuthorizerTargets<TRequest>(AuthorizerTarget[] registered)
+        where TRequest : IBaseRequest
+    {
+        var list = new List<AuthorizerTarget>(registered.Length + 4);
+        list.AddRange(registered);
+        list.Add(AuthorizerTarget<TRequest>.Instance);
+
+        var requestType = typeof(TRequest);
+        var current = requestType.BaseType;
+        while (current != null && current != typeof(object))
+        {
+            if (typeof(IBaseRequest).IsAssignableFrom(current))
+                list.Add(GetOrCreateAuthorizerTarget(current));
+            current = current.BaseType;
+        }
+
+        foreach (var iface in requestType.GetInterfaces())
+        {
+            if (typeof(IBaseRequest).IsAssignableFrom(iface))
+                list.Add(GetOrCreateAuthorizerTarget(iface));
+        }
+
+        return list;
+    }
+
+    [UnconditionalSuppressMessage("AOT", "IL3050:RequiresDynamicCode",
+        Justification = "Chamado para instanciar AuthorizerTarget de interfaces ou classes base da requisição.")]
+    private static AuthorizerTarget GetOrCreateAuthorizerTarget(Type type) =>
+        DynamicAuthorizerTargets.GetOrAdd(type, static t => (AuthorizerTarget)Activator.CreateInstance(typeof(AuthorizerTarget<>).MakeGenericType(t))!);
 
     [UnconditionalSuppressMessage("AOT", "IL3050:RequiresDynamicCode",
         Justification = "Chamado apenas quando RuntimeFeature.IsDynamicCodeSupported é true (verificado em GetHandler).")]

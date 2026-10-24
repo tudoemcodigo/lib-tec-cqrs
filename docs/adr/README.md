@@ -1,4 +1,8 @@
-[🏛️ TEC.Cqrs](../../README.md) ➔ [📖 Documentação](../README.md) ➔ Registros de Decisões de Arquitetura (ADRs)
+<div align="center">
+<img src="https://www.tudoemcodigo.com/marca/PNG/tudoemcodigo-icone-512.png" alt="Tudo em Código" width="90" />
+</div>
+
+[🏠 TEC.Cqrs](../../README.md) › [📚 Documentação](../README.md) › 🏛️ ADRs
 
 # 🏛️ Registros de Decisões de Arquitetura (ADRs) — TEC.Cqrs
 
@@ -26,6 +30,23 @@
 Toda a arquitetura do **TEC.Cqrs** está alinhada ao livro **CQRS na Prática** e foi projetada sob quatro pilares inegociáveis:
 
 1. **Segurança por Padrão (*Fail Closed*):** Nenhuma requisição entra no pipeline desprotegida. Se a autorização não for explicitamente declarada (`RequireAuthorization`), a aplicação falha na inicialização. Comandos sem validador (`RequireValidatorForCommands`) são barrados no boot da API. Erros internos do servidor nunca vazam para o cliente HTTP.
-2. **Alta Performance e Native AOT:** O caminho quente de execução (handlers, wrappers de despacho e resolução de behaviors) não utiliza reflexão (`System.Reflection`), nem emite código dinâmico (`Reflection.Emit`). A compilação AOT pura (.NET 8 e .NET 10) opera com tempo de inicialização sub-milissegundo e baixo footprint de memória.
+2. **Alta Performance e Native AOT:** O caminho quente de execução (handlers, wrappers de despacho e resolução de behaviors) não utiliza reflexão (`System.Reflection`), nem emite código dinâmico (`Reflection.Emit`). A compilação AOT pura (.NET 8 e .NET 10) é suportada, com registro explícito dos handlers.
 3. **Consistência e Atomicidade Concorrente:** Transações são acopladas ao ciclo de vida do Command (`TransactionBehavior`). Comandos aninhados participam da transação externa e qualquer falha interna condena atomicamente a transação como *rollback-only*, impedindo persistências parciais ou corrupção de estado. Notificações pós-commit só são despachadas se o commit for completado com sucesso irrestrito.
 4. **Idempotência Real e Tolerância a Falhas de Rede:** Operações críticas são protegidas contra execuções duplicadas causadas por timeouts de cliente, retries de gateways ou perdas de conexão antes da entrega da resposta, utilizando reserva em duas fases (*Lock/Complete*) e hash de payload SHA-256.
+
+---
+
+## 📐 Template dos ADRs
+
+Todos os ADRs seguem a mesma estrutura:
+
+| Seção | Conteúdo |
+|---|---|
+| `## Status` | `Aceito` (ou `Proposto`, `Substituído por ADR-NNNN`) |
+| `## Contexto e Problema` | O problema e as forças em jogo, com a referência ao livro |
+| `## Decisão` | O que foi decidido e como está implementado |
+| `## Consequências` | `### Positivas` e `### Negativas / Limitações` |
+| `## Referências` | Livro, normas e os tipos do código envolvidos |
+
+---
+⬅️ [📚 Índice da documentação](../README.md) · [🏠 README](../../README.md) · [ADR-0001](0001-mediator-in-process-e-despacho-pre-compilado.md) ➡️

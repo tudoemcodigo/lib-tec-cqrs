@@ -60,7 +60,7 @@ A ordem é fixa e vem do `AddTecCqrs` (o primeiro registrado é o mais externo):
 |---|---|---|
 | **Logging** | Uma `Activity` e métricas por requisição; log de início (Debug), sucesso/falha (Information) e falha interna/exceção (Error), **um único registro por falha** | Nunca registra o conteúdo da requisição |
 | **Exceções** | Converte `AppException` (TEC.Core) e as exceções reconhecidas por um `IExceptionErrorMapper` em `Result` de falha | Não trata outras exceções: elas seguem para o tratamento global (500) |
-| **Autorização** | `[AuthorizeRequest]` (autenticação, papéis, policy) e depois os `IRequestAuthorizer<T>` do tipo, das classes base e das interfaces | Não roda o resto do pipeline se negar |
+| **Autorização** | `[AuthorizeRequest]` (autenticação, papéis, policy), depois `[RequirePermission]` (`IPermissionChecker`) e por fim os `IRequestAuthorizer<T>` do tipo, das classes base e das interfaces | Não roda o resto do pipeline se negar |
 | **Validação** | Executa todos os `IRequestValidator<T>` e soma os erros; exige validador em commands (padrão) | Não aloca nada quando a requisição é válida |
 | **Performance** | Aviso (evento 1006) quando passa de `SlowRequestThreshold` (padrão 500 ms) | Mede só transação + handler (não inclui autorização, validação nem notificações) |
 | **Transação** | Abre, confirma ou desfaz a transação do `IUnitOfWork` em commands | Ignorado em queries, `[SkipTransaction]` ou sem `IUnitOfWork` |

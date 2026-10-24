@@ -84,6 +84,7 @@ Extensões que o usam:
 |---|---|---|
 | `AddFluentValidation()` / `AddFluentValidation(Action<CqrsFluentValidationOptions>)` | `TEC.Cqrs.FluentValidation` | [✅ Validação](validacao.md) |
 | `AddAspNetCore(Action<CqrsAspNetCoreOptions>? configure = null)` | `TEC.Cqrs.AspNetCore` | [🌐 ASP.NET Core](aspnetcore.md) |
+| `AddIdempotency(Action<IdempotencyOptions>? configure = null)` | `TEC.Cqrs.AspNetCore` | [🔁 Idempotência](idempotencia.md#️-opções) |
 
 > [!IMPORTANT]
 > Os satélites usam tipos internos do núcleo (`InternalsVisibleTo`). Instale **todos os `TEC.Cqrs.*` na mesma versão**.

@@ -130,7 +130,7 @@ internal sealed class GetOrderAuthorizer(IPrincipalAccessor user, IOrderReposito
 - Retorne `Result.Success()` para autorizar, ou uma falha (`Error.Forbidden`, `Error.Unauthorized` ou `Error.NotFound`).
 - Com vários authorizers para a mesma requisição, todos precisam autorizar; o primeiro que falhar interrompe.
 - O authorizer roda **antes da validação**: trate valores nulos ou inválidos na requisição.
-- Um authorizer sozinho (sem atributo) já conta como autorização declarada e, desde a 0.2.0, **exige usuário autenticado**
+- Um authorizer sozinho (sem atributo) já conta como autorização declarada e **exige usuário autenticado**
   (`CqrsOptions.AuthorizersRequireAuthentication`, padrão `true`): sem ele, o pipeline retorna 401 `NAO_AUTENTICADO` sem
   chamar o authorizer. Com a opção desligada (ex.: jobs sem `IPrincipalAccessor`), o authorizer é chamado também sem
   usuário (`Principal` nulo ou não autenticado) e precisa negar esse caso por conta própria.
@@ -266,7 +266,7 @@ builder.Services.Replace(ServiceDescriptor.Scoped<IPrincipalAccessor, SecurityPr
 | Código / exceção | HTTP | Quando | O que fazer |
 |---|:---:|---|---|
 | `NAO_AUTENTICADO` "Não autenticado." | 401 | `[AuthorizeRequest]` sem usuário autenticado | Autentique; em jobs, registre um `IPrincipalAccessor` |
-| `ACESSO_NEGADO` "Você não tem permissão para realizar esta operação." | 403 | Sem nenhum dos `Roles` ou policy negada | Conceda o papel/permissão |
+| `ACESSO_NEGADO` "Você não tem permissão para realizar esta operação." | 403 | Sem nenhum dos `Roles`, policy negada ou permissão faltando ([🎫 Permissões](permissoes.md)) | Conceda o papel/permissão |
 | Erros do authorizer | conforme o tipo | `IRequestAuthorizer` retornou falha | — |
 | `InvalidOperationException` "N requisição(ões) sem autorização declarada" | — | Subida com `RequireAuthorization` | Declare a autorização das requisições listadas |
 | `InvalidOperationException` "A requisição '...' não declara autorização" | — | `Send` de requisição cujo handler foi registrado direto no container, sem autorização | Idem |

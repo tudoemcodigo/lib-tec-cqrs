@@ -24,7 +24,7 @@
 ## 🎯 Visão geral
 
 ```mermaid
-flowchart BT
+flowchart TB
     BR["IBaseRequest<br/><sub>marcador</sub>"]
     RQ["IRequest&lt;TResponse&gt;<br/><sub>TResponse: Result</sub>"]
     CB["ICommandBase"]

@@ -24,7 +24,7 @@ Primeira versão do componente **TEC.Cqrs**, o ecossistema mediator de alta perf
   - Bloqueio preventivo na inicialização contra injeção de behaviors desordenados antes do logging e autorização.
 - **Autorização em Três Níveis com Fail-Closed (ADR-0004):**
   - Atributos declarativos `[AuthorizeRequest]` (papéis, autenticação e policies via `IRequestPolicyEvaluator`).
-  - Permissões granulares `[RequirePermission]` com suporte a `Match.All` e `Match.Any` via `IPermissionChecker`.
+  - Permissões granulares `[RequirePermission]` com suporte a `PermissionMatch.All` e `PermissionMatch.Any` (propriedade `Mode`) via `IPermissionChecker`.
   - Autorizadores contextuais de negócio `IRequestAuthorizer<TRequest>` anti-BOLA/IDOR.
   - Verificação na inicialização: requisição sem autorização declarada impede a subida do host (`RequireAuthorization`).
   - Verificação de autenticação obrigatória para authorizers sem atributos (`AuthorizersRequireAuthentication`).
@@ -43,7 +43,7 @@ Primeira versão do componente **TEC.Cqrs**, o ecossistema mediator de alta perf
   - `IPublisher.PublishAfterCommit`: fila isolada via `AsyncLocal<RequestFrame>`, descartada em caso de rollback e executada após commit confirmado com isolamento de falhas e limite anti-recursão (`MaxDeferredRounds = 10`).
 - **Observabilidade Nativa (ADR-0010):**
   - Spans `ActivitySource` ("TEC.Cqrs") sem exposição de dados sensíveis ou payloads nos traces.
-  - Histograma `cqrs.requests.duration` com dimensões controladas sem risco de alta cardinalidade.
+  - Métricas `tec.cqrs.requests` e `tec.cqrs.request.duration` (requisições) e `tec.cqrs.notifications` e `tec.cqrs.notification.duration` (notificações), com dimensões controladas sem risco de alta cardinalidade.
   - Supressão de logs duplicados para exceções já registradas no pipeline (`LoggedExceptions`).
   - Alerta configurável para requisições lentas via `PerformanceBehavior` (`SlowRequestThreshold`).
 
@@ -61,7 +61,7 @@ Primeira versão do componente **TEC.Cqrs**, o ecossistema mediator de alta perf
   - Escopo criptográfico isolado por usuário/tenant com SHA-256 de tipo, emissor e valor do claim (`ScopeDiscriminator`).
   - Hash SHA-256 do método, rota, query, corpo (até `MaxRequestBodyBytes`) e cabeçalhos selecionados (`HashedRequestHeaders`).
   - Retenção de buffer de resposta e gravação antes do envio ao cliente, mantendo a reserva mesmo em desconexão após commit.
-  - `InMemoryIdempotencyStore` thread-safe com limite global (`MaxEntries`) e limite por escopo (`MaxEntriesPerScope`) com descarte $O(n)$.
+  - `InMemoryIdempotencyStore` thread-safe com limite global (`MaxEntries`) e limite por escopo (`MaxEntriesPerScope`) com descarte O(n).
 
 #### 🧩 TEC.Cqrs.FluentValidation
 - **Integração com FluentValidation:**
@@ -69,3 +69,6 @@ Primeira versão do componente **TEC.Cqrs**, o ecossistema mediator de alta perf
   - Instâncias isoladas de `ValidationContext` por validador para evitar erros duplicados.
   - Formatação padronizada camelCase para nomes de propriedades (`CamelCaseValidationFields`).
   - Mapeador de exceções `FluentValidationExceptionMapper` convertendo `ValidationException` em `Result` de validação (HTTP 400).
+
+#### 📚 Documentação
+- Documentação em `docs/` (18 temas, incluindo permissões, idempotência, revisão técnica e os 10 ADRs), READMEs dos três pacotes, dos samples e do CI/CD, conferidos com o código.

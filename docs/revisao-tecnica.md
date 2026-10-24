@@ -33,6 +33,12 @@
 | Consultados para integração | `TEC.Core` (`ApiResponse`), `TEC.ORM` (`EfIdempotencyStore`, `IdempotencyRecord`), `build/Tec.Build.*` (canônicos do `tec-workflows`) |
 | Fora do escopo | Testes de carga (`TEC.Cqrs.LoadTests`) e integração; não há source generator neste componente |
 
+> [!NOTE]
+> Documento **histórico**: commit, versões (`0.1.0`, `0.2.0`) e contagens de testes são os do momento de cada revisão. A
+> versão atual do componente é a `0.0.1` (ver [CHANGELOG](../CHANGELOG.md)) e os achados corrigidos já fazem parte dela.
+> A pendência do B-04 (collation binária no TEC.ORM) foi resolvida: o `EfIdempotencyStore` do `TEC.ORM.SqlServer` já usa
+> `Latin1_General_100_BIN2` em `Scope` e `IdempotencyKey`.
+
 Severidades: **Crítica** (exploração direta, impacto amplo) · **Alta** (perda de garantia central ou dado) · **Média**
 (falha de segurança ou correção sob condições plausíveis) · **Baixa** (condições restritas ou impacto limitado) ·
 **Info** (melhoria, higiene).
@@ -592,8 +598,6 @@ Revisão técnica complementar e auditoria comparativa entre a biblioteca `TEC.C
    - *Sugestão:* Implementar behavior de cache para queries marcadas com `[CacheQuery(DurationSeconds = 60)]`, integrado a `IMemoryCache` ou `IDistributedCache`.
 4. **Behavior de Auditoria Corporativa (`AuditBehavior`):**
    - *Contexto:* Em conformidade com LGPD e requisitos bancários/fiscais (Capítulo 22 do livro), comandos mutantes devem registrar quem executou, quando e o desfecho, utilizando os mascaradores de dados sensíveis do `TEC.Core` para não logar senhas ou dados confidenciais.
-
----
 
 ---
 ⬅️ [💻 Desenvolvimento local](desenvolvimento.md) · [📚 Índice](README.md)

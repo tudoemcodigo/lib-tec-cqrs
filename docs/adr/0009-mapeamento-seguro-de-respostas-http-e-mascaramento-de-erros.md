@@ -1,4 +1,4 @@
-[🏛️ TEC.Cqrs](../../README.md) ➔ [📖 Documentação](../README.md) ➔ [ADRs](README.md) ➔ ADR-0009
+[🏠 TEC.Cqrs](../../README.md) › [📚 Documentação](../README.md) › [🏛️ ADRs](README.md) › ADR-0009
 
 # ADR-0009: Mapeamento Seguro de Respostas HTTP, Sanitização de Erros 500/502 e Proteção de Cabeçalho Location
 
@@ -21,12 +21,12 @@ Implementou-se a camada de transporte HTTP no pacote satélite `TEC.Cqrs.AspNetC
    - Implementa simultaneamente `IResult` (para Minimal APIs do ASP.NET Core) e `IActionResult` (para Controllers tradicionais), permitindo interoperabilidade irrestrita.
    - Implementa `IEndpointMetadataProvider`: expõe automaticamente para ferramentas OpenAPI os códigos HTTP esperados (200/201 e 400, 401, 403, 404, 409, 422, 429, 500, 502) com os esquemas JSON rigorosos.
 2. **Sanitização Ativa de Erros Internos:**
-   - Erros do tipo `ErrorType.Failure` (500) e `ErrorType.ExternalService` (502) têm suas mensagens e detalhes **mascarados por padrão**. O cliente recebe uma mensagem genérica e segura, enquanto os detalhes reais e a exceção associada são despachados exclusivamente para o logger corporativo e para a `Activity` de telemetria.
+   - Erros do tipo `ErrorType.Failure` (500) e `ErrorType.ExternalService` (502) têm suas mensagens e detalhes **mascarados por padrão**. O cliente recebe uma mensagem genérica e segura, enquanto os detalhes reais e a exceção associada vão para o log (a `Activity` recebe apenas o tipo da exceção, salvo `RecordExceptionDetailsInTraces`).
    - O envelope de erro anexa automaticamente o identificador `traceId` (`Activity.Current.TraceId` ou `httpContext.TraceIdentifier`), permitindo suporte técnico e correlação instantânea em logs sem expor dados confidenciais.
 3. **Higienização Estrita do Cabeçalho `Location` (`ToCreatedHttpResult`):**
    - Apenas URLs relativas iniciadas com barra única (`/`) são aceitas.
    - URLs absolutas (`http://...`), esquemas relativos a protocolo (`//host`), barras invertidas (`\`) ou caracteres de controle (`\r`, `\n`) são sumariamente bloqueados.
-   - Os segmentos são escapados individualmente via `Uri.EscapeDataString` (preservando sequências válidas `%XX`). Se a validação falhar, a resposta 201 é emitida com segurança, o cabeçalho malicioso é suprimido e um aviso é gerado no log.
+   - Os caracteres fora do permitido são escapados em UTF-8 (`%XX`) pelo próprio componente, preservando os delimitadores e as sequências `%XX` já escapadas. Se a validação falhar, a resposta 201 é emitida com segurança, o cabeçalho malicioso é suprimido e um aviso é gerado no log.
 4. **Middleware de Exceção Global com Compatibilidade .NET 8 e .NET 10:**
    - Em .NET 10, integra-se ao `SuppressDiagnosticsCallback` nativo para evitar logs duplicados de exceções já convertidas pelo pipeline.
    - Em .NET 8, fornece o `TecExceptionHandlerMiddleware` que emula o mesmo comportamento sem poluição de logs.
@@ -46,3 +46,6 @@ Implementou-se a camada de transporte HTTP no pacote satélite `TEC.Cqrs.AspNetC
 - Livro *CQRS na Prática*, Capítulo 22: *Segurança em aplicações CQRS*.
 - ADR-0002 do `TEC.Core`: *Envelope Padronizado de Respostas de API e Mascaramento de Erros Internos*.
 - Código: `TEC.Cqrs.AspNetCore.ResultHttpExtensions`, `TEC.Cqrs.AspNetCore.ApiResponseHttpResult`.
+
+---
+⬅️ [ADR-0008](0008-idempotencia-http-com-reserva-concorrente-e-hash-criptografico.md) · [🏛️ Índice de ADRs](README.md) · [ADR-0010](0010-observabilidade-nativa-com-opentelemetry-e-metricas-dimensionadas.md) ➡️

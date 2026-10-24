@@ -162,6 +162,7 @@ internal sealed class TransactionBehavior<TRequest, TResponse>(
             }
 
             transaction.Committed = true;
+            pipeline.HasCommittedTransaction = true;
             return response;
         }
         finally

@@ -1,4 +1,4 @@
-[🏛️ TEC.Cqrs](../../README.md) ➔ [📖 Documentação](../README.md) ➔ [ADRs](README.md) ➔ ADR-0005
+[🏠 TEC.Cqrs](../../README.md) › [📚 Documentação](../README.md) › [🏛️ ADRs](README.md) › ADR-0005
 
 # ADR-0005: Validação Obrigatória de Comandos na Inicialização e Integração Polimórfica com FluentValidation
 
@@ -32,7 +32,7 @@ Decidiu-se pela **validação obrigatória de comandos (*Fail Closed*)**, com de
 ## Consequências
 
 ### Positivas
-- **Zero Comandos Inválidos em Produção:** Impossível subir uma aplicação com comandos esquecidos sem validação.
+- **Zero Comandos Sem Validação em Produção:** Com `.AddAspNetCore()`, a aplicação não sobe com comandos esquecidos sem validação.
 - **Formatação Homogênea de Resposta:** Campos inválidos saem no padrão camelCase correspondente ao JSON da API (ex.: `itens[0].quantidade`), prontos para consumo por front-ends modernos.
 - **Desacoplamento Tecnológico:** O núcleo `TEC.Cqrs` permanece livre de dependências de terceiros.
 
@@ -42,3 +42,6 @@ Decidiu-se pela **validação obrigatória de comandos (*Fail Closed*)**, com de
 ## Referências
 - Livro *CQRS na Prática*, Capítulo 09: *Validação*.
 - Código: `TEC.Cqrs.Validation.*`, `TEC.Cqrs.Behaviors.ValidationBehavior`, `TEC.Cqrs.FluentValidation.*`.
+
+---
+⬅️ [ADR-0004](0004-autorizacao-em-tres-camadas-e-controle-granular-de-permissoes.md) · [🏛️ Índice de ADRs](README.md) · [ADR-0006](0006-gestao-transacional-com-comandos-aninhados-e-rollback-only.md) ➡️

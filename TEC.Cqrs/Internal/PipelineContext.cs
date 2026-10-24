@@ -23,13 +23,19 @@ internal sealed class PipelineContext
     // mediator for resolvido do provider raiz, ambos são compartilhados pelo processo e Sends paralelos são rejeitados
     private int _pipelineTransaction;
 
+    public const int MaxRecursionDepth = 15;
+
     /// <summary>Requisição em execução neste fluxo, ou <c>null</c> fora do pipeline.</summary>
     public RequestFrame? Current => _current.Value;
 
     /// <summary>Empilha a requisição neste fluxo. Desempilhe com <see cref="Exit"/>.</summary>
     public RequestFrame Enter(bool isCommand)
     {
-        var frame = new RequestFrame(_current.Value, isCommand);
+        int depth = (_current.Value?.Depth ?? 0) + 1;
+        if (depth > MaxRecursionDepth)
+            throw new InvalidOperationException($"Profundidade máxima de requisições aninhadas ({MaxRecursionDepth}) excedida. Possível ciclo em chamadas de mediator.");
+
+        var frame = new RequestFrame(_current.Value, isCommand, depth);
         _current.Value = frame;
         return frame;
     }
@@ -52,15 +58,19 @@ internal sealed class PipelineContext
 
     /// <summary>Há uma transação aberta pelo pipeline neste escopo (em qualquer fluxo).</summary>
     public bool HasPipelineTransaction => Volatile.Read(ref _pipelineTransaction) == 1;
+
+    /// <summary>Indica se uma transação do pipeline foi confirmada neste escopo.</summary>
+    public bool HasCommittedTransaction { get; set; }
 }
 
 /// <summary>Uma requisição em execução: notificações pós-commit pendentes e, se ela abriu, a transação.</summary>
-internal sealed class RequestFrame(RequestFrame? parent, bool isCommand)
+internal sealed class RequestFrame(RequestFrame? parent, bool isCommand, int depth = 1)
 {
     private readonly Lock _lock = new();
     private List<DeferredNotification>? _deferred;
 
     public RequestFrame? Parent { get; } = parent;
+    public int Depth { get; } = depth;
 
     /// <summary>
     /// A requisição é um command (com ou sem <c>[SkipTransaction]</c>): se falhar dentro da transação de outro command,

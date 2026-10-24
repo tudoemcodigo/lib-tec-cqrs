@@ -1,4 +1,4 @@
-[🏛️ TEC.Cqrs](../../README.md) ➔ [📖 Documentação](../README.md) ➔ [ADRs](README.md) ➔ ADR-0010
+[🏠 TEC.Cqrs](../../README.md) › [📚 Documentação](../README.md) › [🏛️ ADRs](README.md) › ADR-0010
 
 # ADR-0010: Observabilidade Integrada com OpenTelemetry Nativo, Métricas Sem Cardinalidade Descontrolada e Traces Sanitizados
 
@@ -20,22 +20,23 @@ Implementou-se instrumentação nativa zero-dependency baseada nas APIs da BCL d
 1. **ActivitySource Nativo (`TEC.Cqrs`):**
    - Cada requisição gera um span (`Activity`) iniciado no `LoggingBehavior`.
    - Tags estruturadas padronizadas:
-     - `cqrs.request`: Nome completo do tipo da requisição (ex.: `CriarClienteCommand`).
-     - `cqrs.kind`: Identificador de categoria (`command` ou `query`).
+     - `cqrs.request`: Nome completo do tipo da requisição (ex.: `MinhaApp.Clientes.CriarClienteCommand`).
+     - `cqrs.kind`: Identificador de categoria (`command`, `query` ou `request`; `notification` nas publicações).
      - `cqrs.success`: Booleano indicando o desfecho (`true`/`false`).
      - `cqrs.outcome`: Categoria do desfecho (`success`, `failure`, `exception`, `canceled`).
      - `cqrs.error_code`: Código padronizado de erro do `Result` quando houver falha.
+     - `error.type`: `ErrorType` da falha ou tipo da exceção.
    - **Sanitização de Payloads:** Parâmetros da requisição e dados do payload **nunca** são adicionados aos spans ou logs.
    - **Controle de Detalhes de Exceção:** Mensagem e stack trace só são anexados ao span se `CqrsOptions.RecordExceptionDetailsInTraces = true`. O log sempre recebe a exceção completa, mas o span de APM permanece seguro por padrão.
 2. **Métricas de Baixa Cardinalidade (`CqrsMetrics`):**
    - Utiliza `System.Diagnostics.Metrics.Meter` com nome `"TEC.Cqrs"`.
-   - Métrica principal: `cqrs.requests.duration` (Histograma em segundos).
-   - Dimensões estritamente controladas: apenas `request_name`, `request_kind`, `outcome` e `error_type` (ex.: `Validation`, `Conflict`). Nenhuma informação de entidade ou usuário entra nas métricas, garantindo estabilidade e custo zero de memória nos agregadores.
+   - Instrumentos: `tec.cqrs.requests` e `tec.cqrs.request.duration` (contador e histograma em segundos, por requisição) e `tec.cqrs.notifications` e `tec.cqrs.notification.duration` (por notificação).
+   - Dimensões estritamente controladas: apenas `cqrs.request`, `cqrs.kind`, `cqrs.outcome` e `error.type` (ex.: `Validation`, `Conflict`); nas notificações, `cqrs.notification`. Nenhuma informação de entidade ou usuário entra nas métricas, garantindo estabilidade e custo zero de memória nos agregadores.
 3. **Supressão Ativa de Logs Redundantes (`LoggedExceptions`):**
    - Uma exceção não tratada é marcada internamente (`LoggedExceptions.TryMark(ex)`).
    - Se já registrada pelo `LoggingBehavior`, o middleware global de exceção (`TecExceptionHandlerMiddleware`) suprime a gravação redundante, mantendo os logs limpos e fáceis de analisar em incidentes.
 4. **Telemetria de Notificações (`NotificationTelemetry`):**
-   - Spans específicos para publicação de eventos (`NotificationPublisher`), com atributo `cqrs.notification` e marcação de execução pós-commit (`after_commit = true`).
+   - Spans específicos para publicação de eventos (`NotificationPublisher`), com atributo `cqrs.notification` e marcação de execução pós-commit (`cqrs.after_commit = true`).
 
 ## Consequências
 
@@ -52,3 +53,6 @@ Implementou-se instrumentação nativa zero-dependency baseada nas APIs da BCL d
 - Livro *CQRS na Prática*, Capítulo 22: *Segurança em aplicações CQRS*.
 - OpenTelemetry Semantic Conventions for General Attributes and Messaging.
 - Código: `TEC.Cqrs.Diagnostics.CqrsDiagnostics`, `TEC.Cqrs.Internal.CqrsMetrics`, `TEC.Cqrs.Behaviors.LoggingBehavior`.
+
+---
+⬅️ [ADR-0009](0009-mapeamento-seguro-de-respostas-http-e-mascaramento-de-erros.md) · [🏛️ Índice de ADRs](README.md)

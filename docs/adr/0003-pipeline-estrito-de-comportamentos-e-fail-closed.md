@@ -1,4 +1,4 @@
-[🏛️ TEC.Cqrs](../../README.md) ➔ [📖 Documentação](../README.md) ➔ [ADRs](README.md) ➔ ADR-0003
+[🏠 TEC.Cqrs](../../README.md) › [📚 Documentação](../README.md) › [🏛️ ADRs](README.md) › ADR-0003
 
 # ADR-0003: Pipeline Estrito de Behaviors, Ordem Determinística e Defesa em Profundidade
 
@@ -33,7 +33,7 @@ flowchart TD
    - **Autorização Antes da Validação:** Usuários não autenticados ou não autorizados recebem 401/403 imediatamente, sem que o validador execute e sem revelar mensagens de erro ou regras de domínio a atores maliciosos.
    - **Transação Logo Antes do Handler:** Conexões com banco de dados e transações do `IUnitOfWork` só são abertas se e somente se o comando passou com sucesso irrestrito por autorização, validação e behaviors customizados.
 2. **Proteção Contra Registro Fora de Ordem (`EnsureNoBehaviorsRegisteredBefore`):**
-   - É terminantemente proibido registrar `IPipelineBehavior<,>` diretamente no container antes de invocar `services.AddTecCqrs(...)`. O container valida isso na inicialização e lança `InvalidOperationException`.
+   - É terminantemente proibido registrar `IPipelineBehavior<,>` diretamente no container antes de invocar `services.AddTecCqrs(...)`. O container valida isso na inicialização e lança `InvalidOperationException`. Um behavior registrado direto no container **depois** do `AddTecCqrs` é aceito e roda dentro da transação, logo antes do handler.
 
 ## Consequências
 
@@ -49,3 +49,6 @@ flowchart TD
 - Livro *CQRS na Prática*, Capítulo 08: *Pipeline behaviors*.
 - Livro *CQRS na Prática*, Capítulo 22: *Segurança em aplicações CQRS*.
 - Código: `TEC.Cqrs.DependencyInjection.ServiceCollectionExtensions`, `TEC.Cqrs.Behaviors.*`.
+
+---
+⬅️ [ADR-0002](0002-result-pattern-obrigatorio-em-todas-as-requisicoes.md) · [🏛️ Índice de ADRs](README.md) · [ADR-0004](0004-autorizacao-em-tres-camadas-e-controle-granular-de-permissoes.md) ➡️

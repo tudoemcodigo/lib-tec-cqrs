@@ -18,6 +18,8 @@
   `ErrorType` (400, 401, 403, 404, 409, 422, 429, 500, 502), `traceId` nas falhas e metadados OpenAPI automáticos. Minimal
   APIs e Controllers.
 - **`UseTecExceptionHandler()`**: exceções viram `ApiResponse`; 500/502 com mensagem genérica, sem log duplicado.
+- **Idempotência HTTP**: `AddIdempotency()`, `UseTecIdempotency()` e `.WithIdempotency()` fazem a mesma `Idempotency-Key` devolver
+  a resposta original, com reserva contra requisições simultâneas (precisa de um `IIdempotencyStore`).
 - `Location` só com caminho relativo seguro; JSON com metadados gerados em compilação para Native AOT.
 
 ## 🎯 Quando usar
@@ -61,5 +63,6 @@ app.MapGet("/clientes/{id:guid}", (Guid id, ISender sender, CancellationToken ct
 
 Opções (`JsonTypeInfoResolver`, `ReplaceExistingPrincipalAccessor`), formato das respostas, paginação, OpenAPI e
 tratamento de exceções: [docs/aspnetcore.md](https://github.com/tudoemcodigo/lib-tec-cqrs/blob/main/docs/aspnetcore.md).
+Idempotência: [docs/idempotencia.md](https://github.com/tudoemcodigo/lib-tec-cqrs/blob/main/docs/idempotencia.md).
 
 `net8.0` e `net10.0` · Native AOT · [MIT](https://github.com/tudoemcodigo/lib-tec-cqrs/blob/main/LICENSE) · Roberto Oliveira, equipe Tudo em Código
