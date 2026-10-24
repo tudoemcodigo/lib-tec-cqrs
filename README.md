@@ -12,7 +12,7 @@ Mediator próprio · `Result` em vez de exceção · Autorização e validação
 [![.NET](https://img.shields.io/badge/.NET-8.0%20%7C%2010.0-512BD4?logo=dotnet&logoColor=white)](#-compatibilidade)
 [![Native AOT](https://img.shields.io/badge/Native%20AOT-compat%C3%ADvel-512BD4)](#-compatibilidade)
 [![Versão](https://img.shields.io/badge/vers%C3%A3o-0.0.1-blue)](CHANGELOG.md)
-[![Licença: MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-green)](LICENSE)
+[![Licença: Apache 2.0](https://img.shields.io/badge/licen%C3%A7a-Apache%202.0-blue)](LICENSE)
 
 [📥 Instalação](#-instalação) · [🚀 Início rápido](#-início-rápido) · [📚 Documentação](docs/README.md) · [📝 Changelog](CHANGELOG.md) · [⚙️ CI/CD](.github/workflows/README.md)
 
@@ -60,8 +60,8 @@ Mediator próprio · `Result` em vez de exceção · Autorização e validação
 
 | Pacote | Para que serve | Quando instalar | Depende de |
 |---|---|---|---|
-| [`TEC.Cqrs`](TEC.Cqrs/README.md) | Mediator, commands/queries, pipeline (log, exceções, autorização, validação, performance, transação), notificações, telemetria | Sempre; sozinho em workers, jobs e consumidores de fila | `TEC.Core`, `Microsoft.Extensions.Logging.Abstractions` |
-| [`TEC.Cqrs.AspNetCore`](TEC.Cqrs.AspNetCore/README.md) | Usuário do `HttpContext`, policies do `IAuthorizationService`, `Result` → resposta HTTP, tratamento global de exceções | APIs ASP.NET Core (Minimal APIs ou Controllers) | `TEC.Cqrs`, `Microsoft.AspNetCore.App` |
+| [`TEC.Cqrs`](TEC.Cqrs/README.md) | Mediator, commands/queries, pipeline (log, exceções, autorização, validação, performance, transação), notificações, telemetria, contrato e store em memória da idempotência | Sempre; sozinho em workers, jobs e consumidores de fila | `TEC.Core`, `Microsoft.Extensions.Logging.Abstractions` |
+| [`TEC.Cqrs.AspNetCore`](TEC.Cqrs.AspNetCore/README.md) | Usuário do `HttpContext`, policies do `IAuthorizationService`, `Result` → resposta HTTP, tratamento global de exceções, idempotência HTTP (`Idempotency-Key`) | APIs ASP.NET Core (Minimal APIs ou Controllers) | `TEC.Cqrs`, `Microsoft.AspNetCore.App` |
 | [`TEC.Cqrs.FluentValidation`](TEC.Cqrs.FluentValidation/README.md) | `AbstractValidator<T>` executados no pipeline, um erro por campo | Quando a validação de entrada usa FluentValidation | `TEC.Cqrs`, `FluentValidation` 12 |
 
 > [!IMPORTANT]
@@ -232,9 +232,10 @@ Autorização vem **antes** da validação (quem não tem acesso não descobre a
 | [⚙️ Opções e registro](docs/opcoes.md) | `AddTecCqrs`, `CqrsOptions`, `ICqrsBuilder` e as opções dos satélites |
 | [⚡ Native AOT](docs/aot.md) | Registro explícito, JSON com *source generator* e limitações |
 | [🛡️ Segurança](docs/seguranca.md) | Modelo de ameaças, garantias do pipeline, responsabilidades da aplicação e checklist |
-| [🏛️ Decisões de Arquitetura (ADRs)](docs/adr/README.md) | Registros formais de decisões arquiteturais do TEC.Cqrs alinhadas ao livro *CQRS na Prática* (ADR-0001 a ADR-0010) |
 | [🧪 Testes](docs/testes.md) | Suítes, categorias, como rodar local, variáveis `TEC_CARGA_*` e testes de arquitetura na aplicação |
 | [💻 Desenvolvimento local](docs/desenvolvimento.md) | Como compilar (feed `tec-interno` por padrão, repositórios vizinhos sob demanda) e regenerar lock files |
+| [🔎 Revisão técnica](docs/revisao-tecnica.md) | Revisão de segurança, bugs e organização (2026-10-19), com evidências, correções aplicadas e melhorias priorizadas, e a auditoria de robustez de 2026-10-23 |
+| [🏛️ Decisões de Arquitetura (ADRs)](docs/adr/README.md) | Registros formais de decisões arquiteturais do TEC.Cqrs alinhadas ao livro *CQRS na Prática* (ADR-0001 a ADR-0010) |
 | [🧰 Samples](samples/README.md) | API de pedidos de exemplo e gerador de carga HTTP |
 | [⚙️ CI/CD](.github/workflows/README.md) | Workflows, gatilhos e como publicar |
 
@@ -267,10 +268,10 @@ dotnet test --project TEC.Cqrs.Tests -c Release                                 
 dotnet test --project TEC.Cqrs.LoadTests -c Release --treenode-filter "/*/*/*/*[Category=Carga-CI]"   # carga rápida
 ```
 
-209 testes por execução em `net10.0` e 216 em `net8.0` no `TEC.Cqrs.Tests` (TUnit: pipeline, regressão, segurança,
-robustez, HTTP e divisão dos pacotes) a cada PR, 13 de carga rápida (`Carga-CI`) e 7 pesados (`Carga-Pesada`: vazão,
-volume, soak e carga sustentada na API de exemplo, ~4–5 min com `TEC_CARGA_FATOR=1`), estes de carga só sob demanda no
-`performance.yml` manual. Não há testes de integração externa: o TEC.Cqrs não acessa rede nem banco. Detalhes em
+280 testes por execução em `net10.0` e 287 em `net8.0` no `TEC.Cqrs.Tests` (TUnit: pipeline, regressão, segurança,
+robustez, permissões, idempotência, HTTP e divisão dos pacotes) a cada PR, 13 de carga rápida (`Carga-CI`) e 7 pesados
+(`Carga-Pesada`: vazão, volume, soak e carga sustentada na API de exemplo, ~4–5 min com `TEC_CARGA_FATOR=1`), estes de
+carga só sob demanda no `performance.yml` manual. Não há testes de integração externa: o TEC.Cqrs não acessa rede nem banco. Detalhes em
 [docs/testes.md](docs/testes.md).
 
 ## 🤝 Contribuição
@@ -288,4 +289,4 @@ pelo workflow **Publicar versão** ([CI/CD](.github/workflows/README.md)).
 
 ## 📄 Licença
 
-[MIT](LICENSE) · Criado e mantido por **Roberto Oliveira**, equipe **Tudo em Código** · [github.com/tudoemcodigo](https://github.com/tudoemcodigo)
+[Apache 2.0](LICENSE) — consulte [NOTICE](NOTICE) para informações de atribuição. Criado e mantido por **Roberto Oliveira**, equipe **Tudo em Código** · [github.com/tudoemcodigo](https://github.com/tudoemcodigo)

@@ -1,3 +1,7 @@
+<div align="center">
+<img src="https://www.tudoemcodigo.com/marca/PNG/tudoemcodigo-icone-512.png" alt="Tudo em Código" width="90" />
+</div>
+
 [🏠 TEC.Cqrs](../../README.md) › [📚 Documentação](../../docs/README.md) › ⚙️ CI/CD
 
 # ⚙️ CI/CD e publicação
@@ -81,8 +85,8 @@ Não há `.github/scripts/`: o TEC.Cqrs não sobe containers nem cria segredos t
 - Os unitários rodam em matriz: `net10.0` (com cobertura), `net8.0` e `net10.0` sem ICU.
 - Sem `integration-tests`, `azure-client-id` nem `azure-env`: o job de integração não existe. Sem testes de carga:
   `Carga-CI` e `Carga-Pesada` ficam no `performance.yml`.
-- Permissões: `contents: read` no topo; o job recebe também `pull-requests`, `actions`, `security-events` (leitura),
-  `packages: write` (só o `publicar-previa` publica, no push na `main`) e `id-token: write` (exigido pelo workflow de
+- Permissões: `contents: read` no topo; o job recebe também `pull-requests` e `actions` (leitura), `security-events: write`
+  (CodeQL), `packages: write` (só o `publicar-previa` publica, no push na `main`) e `id-token: write` (exigido pelo workflow de
   testes reutilizável; aqui não há login no Azure).
 - No push na `main`, depois do `ci-ok` verde, o job `publicar-previa` publica os 3 pacotes como
   `<Version do Directory.Build.props>-preview.N` (N sequencial por versão, reinicia a cada nova `<Version>`; ex.: `0.0.1-preview.3`). Se a tag `v<Version>` já existe,
@@ -107,7 +111,7 @@ Sequência: valida a versão (precisa ser disparado **da `main`**; a tag `vX.Y.Z
 unitários ×3 (com relatório de cobertura) e CodeQL em paralelo → só com **todos** verdes cria a tag e o Release e publica
 os 3 pacotes no GitHub Packages. Sem testes de carga. `concurrency: publicar-versao`, sem cancelamento.
 
-Permissões do job: `contents: write` (tag/Release), `packages: write` (push), `actions`/`security-events: read`
+Permissões do job: `contents: write` (tag/Release), `packages: write` (push), `actions: read` e `security-events: write`
 (CodeQL), `id-token: write` (exigido pelo workflow de testes).
 
 ---
@@ -120,7 +124,7 @@ compartilhado é ruidoso e não pode bloquear PR nem versão.
 | Entrada | Padrão | Efeito |
 |---|---|---|
 | `suite` | `pesadas` | `pesadas` (job `pesados`), `rapida` (job `rapida`) ou `todas` |
-| `fator` | `1` | Repassado como `TEC_CARGA_FATOR` |
+| `fator` | `1` | Repassado como `TEC_CARGA_FATOR` ao job `pesados` |
 
 - Job `rapida`: `TEC.Cqrs.LoadTests /*/*/*/*[Category=Carga-CI]` (segundos), artefato `carga`.
 - Job `pesados`: `TEC.Cqrs.LoadTests /*/*/*/*[Category=Carga-Pesada]` com `timeout-minutes: 120` e artefato `pesados`.
@@ -177,7 +181,7 @@ efêmero e não há testes contra serviços externos.
 | Controle | Como |
 |---|---|
 | Menor privilégio | `contents: read` no topo; escrita só no `release.yml` e no `publicar-previa` do `ci.yml` (`packages: write`, push na `main`); `id-token: write` só nos jobs de teste |
-| Actions fixadas | Terceiros por SHA, tec-workflows por `v1`; `zizmor` audita; Dependabot com cooldown de 7 dias |
+| Actions fixadas | Terceiros por SHA, tec-workflows por `v2`; `zizmor` audita; Dependabot com cooldown de 7 dias |
 | Sem credencial no disco | `persist-credentials: false` em todo checkout (workflows centrais) |
 | Sem pacote órfão | Tag + Release antes do push; release só com todos os portões verdes |
 | Cadeia de suprimentos | `restore --locked-mode`, `NuGetAudit` como erro, `packageSourceMapping`, CodeQL `security-extended` |
