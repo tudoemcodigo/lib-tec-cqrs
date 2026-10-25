@@ -767,7 +767,7 @@ public class ConcurrencyTests
         var ex = await Assert.That(async () =>
             {
                 await Task.WhenAll(
-                    sender.Send(new ParallelCommand("A", DelayMs: 50)),
+                    sender.Send(new ParallelCommand("A", DelayMs: 200)),
                     sender.Send(new ParallelCommand("B", DelayMs: 0)));
             })
             .ThrowsExactly<InvalidOperationException>();
