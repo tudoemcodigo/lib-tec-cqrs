@@ -121,14 +121,14 @@
       "tec.cqrs.aspnetcore": {
         "type": "Project",
         "dependencies": {
-          "TEC.Cqrs": "[0.0.1, )"
+          "TEC.Cqrs": "[0.0.2, )"
         }
       },
       "tec.cqrs.fluentvalidation": {
         "type": "Project",
         "dependencies": {
           "FluentValidation": "[12.2.0, )",
-          "TEC.Cqrs": "[0.0.1, )"
+          "TEC.Cqrs": "[0.0.2, )"
         }
       },
       "tec.cqrs.loadgenerator": {
@@ -137,9 +137,9 @@
       "tec.cqrs.sampleapi": {
         "type": "Project",
         "dependencies": {
-          "TEC.Cqrs": "[0.0.1, )",
-          "TEC.Cqrs.AspNetCore": "[0.0.1, )",
-          "TEC.Cqrs.FluentValidation": "[0.0.1, )"
+          "TEC.Cqrs": "[0.0.2, )",
+          "TEC.Cqrs.AspNetCore": "[0.0.2, )",
+          "TEC.Cqrs.FluentValidation": "[0.0.2, )"
         }
       },
       "FluentValidation": {
@@ -324,14 +324,14 @@
       "tec.cqrs.aspnetcore": {
         "type": "Project",
         "dependencies": {
-          "TEC.Cqrs": "[0.0.1, )"
+          "TEC.Cqrs": "[0.0.2, )"
         }
       },
       "tec.cqrs.fluentvalidation": {
         "type": "Project",
         "dependencies": {
           "FluentValidation": "[12.2.0, )",
-          "TEC.Cqrs": "[0.0.1, )"
+          "TEC.Cqrs": "[0.0.2, )"
         }
       },
       "tec.cqrs.loadgenerator": {
@@ -340,9 +340,9 @@
       "tec.cqrs.sampleapi": {
         "type": "Project",
         "dependencies": {
-          "TEC.Cqrs": "[0.0.1, )",
-          "TEC.Cqrs.AspNetCore": "[0.0.1, )",
-          "TEC.Cqrs.FluentValidation": "[0.0.1, )"
+          "TEC.Cqrs": "[0.0.2, )",
+          "TEC.Cqrs.AspNetCore": "[0.0.2, )",
+          "TEC.Cqrs.FluentValidation": "[0.0.2, )"
         }
       },
       "FluentValidation": {
