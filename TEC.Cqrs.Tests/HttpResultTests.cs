@@ -119,6 +119,59 @@ public class HttpResultTests
         await Assert.That(json).DoesNotContain("secreta");
     }
 
+    [Test]
+    public async Task NoContent_on_success_returns_204_without_body()
+    {
+        var result = Result.Success();
+        var (context, _) = await ExecuteNoContentAsync(result.ToNoContentHttpResult());
+
+        await Assert.That(context.Response.StatusCode).IsEqualTo(204);
+        await Assert.That(context.Response.Body.Length).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task NoContent_on_failure_returns_error_status_and_envelope()
+    {
+        var result = Result.Failure(Error.NotFound("ITEM_NAO_ENCONTRADO", "Item não encontrado."));
+        var (context, body) = await ExecuteAsync(result.ToNoContentHttpResult());
+
+        await Assert.That(context.Response.StatusCode).IsEqualTo(404);
+        await Assert.That(body.GetProperty("success").GetBoolean()).IsFalse();
+        await Assert.That(body.GetProperty("errors")[0].GetProperty("code").GetString()).IsEqualTo("ITEM_NAO_ENCONTRADO");
+    }
+
+    [Test]
+    public async Task HttpConcurrencyExtensions_generates_and_extracts_etag()
+    {
+        byte[] version = [0x01, 0x02, 0x03, 0x04];
+        string etag = HttpConcurrencyExtensions.GerarETag(version);
+
+        await Assert.That(etag).IsEqualTo($"\"{Convert.ToBase64String(version)}\"");
+
+        var extracted = HttpConcurrencyExtensions.ExtrairRowVersion(etag);
+        await Assert.That(extracted).IsNotNull();
+        await Assert.That(extracted!.SequenceEqual(version)).IsTrue();
+
+        var weakExtracted = HttpConcurrencyExtensions.ExtrairRowVersion($"W/{etag}");
+        await Assert.That(weakExtracted!.SequenceEqual(version)).IsTrue();
+
+        await Assert.That(HttpConcurrencyExtensions.ExtrairRowVersion(null)).IsNull();
+        await Assert.That(HttpConcurrencyExtensions.ExtrairRowVersion("*")).IsNull();
+    }
+
+    private static async Task<(HttpContext Context, string RawBody)> ExecuteNoContentAsync(IResult result)
+    {
+        Activity.Current = null;
+        var context = new DefaultHttpContext { TraceIdentifier = "trace-123" };
+        context.Response.Body = new MemoryStream();
+
+        await result.ExecuteAsync(context);
+
+        context.Response.Body.Position = 0;
+        string raw = await new StreamReader(context.Response.Body).ReadToEndAsync();
+        return (context, raw);
+    }
+
     private static DefaultHttpContext CreateContextWithException(Exception exception)
     {
         var context = new DefaultHttpContext();

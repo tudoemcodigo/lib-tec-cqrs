@@ -175,4 +175,19 @@ public static class ResultHttpExtensions
         ArgumentNullException.ThrowIfNull(result);
         return (await result.ConfigureAwait(false)).ToCreatedHttpResult(location, successMessage);
     }
+
+    /// <summary>Sucesso: HTTP 204 sem corpo. Falha: status e erros conforme o tipo do erro no envelope <see cref="ApiResponse"/>.</summary>
+    /// <param name="result">Resultado do command.</param>
+    public static ApiResponseNoContentHttpResult ToNoContentHttpResult(this Result result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        return new(result);
+    }
+
+    /// <inheritdoc cref="ToNoContentHttpResult(Result)"/>
+    public static async Task<ApiResponseNoContentHttpResult> ToNoContentHttpResult(this Task<Result> result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        return (await result.ConfigureAwait(false)).ToNoContentHttpResult();
+    }
 }
