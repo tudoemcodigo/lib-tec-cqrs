@@ -2,11 +2,6 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
-#if !NET10_0_OR_GREATER
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
-using TEC.Cqrs.AspNetCore.Internal;
-#endif
 using TEC.Core.Common.Results;
 using TEC.Core.Exceptions;
 using TEC.Core.Responses;
@@ -43,7 +38,6 @@ public static class ApplicationBuilderExtensions
     public static IApplicationBuilder UseTecExceptionHandler(this IApplicationBuilder app)
     {
         ArgumentNullException.ThrowIfNull(app);
-#if NET10_0_OR_GREATER
         return app.UseExceptionHandler(new ExceptionHandlerOptions
         {
             ExceptionHandler = HandleExceptionAsync,
@@ -51,13 +45,6 @@ public static class ApplicationBuilderExtensions
             AllowStatusCode404Response = true,
             SuppressDiagnosticsCallback = context => SuppressDiagnostics(context.Exception, context.HttpContext.RequestServices)
         });
-#else
-        // .NET 8: o UseExceptionHandler não permite suprimir o log (SuppressDiagnosticsCallback é do .NET 10)
-        var logger = app.ApplicationServices.GetService<ILoggerFactory>()?.CreateLogger(TecExceptionHandlerMiddleware.Category)
-            ?? NullLogger.Instance;
-        return app.Use(next => context =>
-            TecExceptionHandlerMiddleware.InvokeAsync(context, next, logger, SuppressDiagnostics, HandleExceptionAsync));
-#endif
     }
 
     /// <summary>Não registra de novo: erros do cliente (4xx) e exceções já registradas pelo <c>LoggingBehavior</c>.</summary>

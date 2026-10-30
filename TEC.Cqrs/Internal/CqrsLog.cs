@@ -45,7 +45,8 @@ internal static partial class CqrsLog
     [LoggerMessage(1010, LogLevel.Warning, "Transação de {RequestName} desfeita: um command interno falhou.")]
     public static partial void NestedCommandRollback(ILogger logger, string requestName);
 
-    // 1011 (Location descartado) e 1012–1015 (UseTecExceptionHandler no .NET 8) são registrados pelo pacote TEC.Cqrs.AspNetCore
+    // 1011 (Location descartado) é registrado pelo pacote TEC.Cqrs.AspNetCore. 1012 a 1015 eram do middleware de exceções
+    // do .NET 8, removido na 0.0.2: não reutilize esses números
 
     [LoggerMessage(1016, LogLevel.Error, "Publicação pós-commit de {RequestName} interrompida após {MaxRounds} rodadas: {PendingCount} notificação(ões) descartada(s) (primeira: {NotificationName}). Algum handler pós-commit chama PublishAfterCommit em ciclo.")]
     public static partial void DeferredNotificationRoundsExceeded(ILogger logger, string requestName, int maxRounds, int pendingCount, string notificationName);

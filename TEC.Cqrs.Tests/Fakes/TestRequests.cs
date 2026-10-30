@@ -1,8 +1,3 @@
-#if NET9_0_OR_GREATER
-using SyncLock = System.Threading.Lock;
-#else
-using SyncLock = object;
-#endif
 using FluentValidation;
 using TEC.Core.Common.Results;
 using TEC.Core.Exceptions;
@@ -162,7 +157,7 @@ internal sealed class RecordingBehavior<TRequest, TResponse>(CallLog log) : IPip
 /// <summary>Registro da sequência de chamadas (Scoped por teste; seguro para Sends em paralelo).</summary>
 public sealed class CallLog
 {
-    private readonly SyncLock _lock = new();
+    private readonly Lock _lock = new();
     private readonly List<string> _entries = [];
 
     public IReadOnlyList<string> Entries

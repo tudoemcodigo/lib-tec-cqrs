@@ -30,13 +30,14 @@
 flowchart LR
     subgraph PR["🔀 ci.yml → dotnet-ci.yml (PR / push na main)"]
         direction LR
-        CV["convenções"] ~~~ BP["build + pack<br/><sub>3 pacotes</sub>"] ~~~ U["TEC.Cqrs.Tests<br/>net10.0 · net8.0 · sem ICU"]
+        CV["convenções"] ~~~ BP["build + pack<br/><sub>3 pacotes</sub>"] ~~~ U["TEC.Cqrs.Tests<br/>net10.0 · sem ICU"]
         CQ["CodeQL"] ~~~ OK["✅ ci-ok"]
+        AOT["⚡ Native AOT<br/><sub>publish + execução</sub>"]
         OK -- "só push na main" --> PV["📦 publicar-previa<br/><sub>X.Y.Z-preview.N</sub>"]
     end
     subgraph REL["⌨️ release.yml → dotnet-release.yml"]
         direction LR
-        V["validar versão<br/><sub>X.Y.Z ou X.Y.Z-rc.N</sub>"] --> G["convenções · pack ·<br/>unit ×3 + cobertura · CodeQL"] --> TAG["🏷️ tag + Release"] --> PUB["📦 GitHub Packages<br/>3 pacotes, mesma versão"]
+        V["validar versão<br/><sub>X.Y.Z ou X.Y.Z-rc.N</sub>"] --> G["convenções · pack ·<br/>unit ×2 + cobertura · CodeQL"] --> TAG["🏷️ tag + Release"] --> PUB["📦 GitHub Packages<br/>3 pacotes, mesma versão"]
     end
     subgraph PERF["⌨️ performance.yml → dotnet-test.yml (só manual)"]
         RA["rapida<br/><sub>Carga-CI</sub>"] ~~~ HV["pesados<br/><sub>Carga-Pesada · TEC_CARGA_FATOR</sub>"]
@@ -45,11 +46,11 @@ flowchart LR
 
 | Evento | Workflow | O que roda | Publica? |
 |---|---|---|:---:|
-| `pull_request` para a `main` / `merge_group` | `ci.yml` | Convenções, build + pack, `TEC.Cqrs.Tests` em matriz e CodeQL em paralelo → check `ci-ok` | ❌ |
+| `pull_request` para a `main` / `merge_group` | `ci.yml` | Convenções, build + pack, `TEC.Cqrs.Tests` em matriz e CodeQL em paralelo → check `ci-ok`; em paralelo, o job próprio `Native AOT` | ❌ |
 | `push` na `main` (merge) | `ci.yml` | O mesmo e, com `ci-ok` verde, `publicar-previa` | ✅ `<Version>-preview.N` |
 | `schedule` segunda 06:00 UTC / manual | `ci.yml` | O mesmo na `main`: CodeQL com consultas novas e auditoria com vulnerabilidades novas | ❌ |
 | Manual (**Performance**) | `performance.yml` | Input `suite`: `pesadas` (padrão, `Carga-Pesada`), `rapida` (`Carga-CI`) ou `todas`; input `fator` | ❌ |
-| Manual (**Publicar versão**) | `release.yml` | Convenções, pack, unitários ×3 + cobertura e CodeQL, depois tag, Release e push dos 3 pacotes | ✅ `X.Y.Z` ou `-rc.N` |
+| Manual (**Publicar versão**) | `release.yml` | Convenções, pack, unitários ×2 + cobertura e CodeQL, depois tag, Release e push dos 3 pacotes | ✅ `X.Y.Z` ou `-rc.N` |
 
 Os testes de carga não rodam no PR nem na publicação: tempo de parede em runner compartilhado é ruidoso e não pode
 bloquear PR nem versão.
@@ -64,9 +65,9 @@ bloquear PR nem versão.
 
 | Arquivo | Função |
 |---|---|
-| [`ci.yml`](ci.yml) | Validação de PR, do push na `main` (com publicação da prévia) e semanal na `main`, com `dotnet-ci.yml@v2` |
-| [`release.yml`](release.yml) | Publicação de versão estável ou `-rc.N`, com `dotnet-release.yml@v2` |
-| [`performance.yml`](performance.yml) | Testes de carga só sob demanda (manual), com `dotnet-test.yml@v2` |
+| [`ci.yml`](ci.yml) | Validação de PR, do push na `main` (com publicação da prévia) e semanal na `main`, com `dotnet-ci.yml@v1`, mais o job próprio `Native AOT` |
+| [`release.yml`](release.yml) | Publicação de versão estável ou `-rc.N`, com `dotnet-release.yml@v1` |
+| [`performance.yml`](performance.yml) | Testes de carga só sob demanda (manual), com `dotnet-test.yml@v1` |
 | [`../dependabot.yml`](../dependabot.yml) · [`../zizmor.yml`](../zizmor.yml) | Canônicos do tec-workflows (não editar aqui) |
 
 Não há `.github/scripts/`: o TEC.Cqrs não sobe containers nem cria segredos temporários para testar.
@@ -82,7 +83,12 @@ Não há `.github/scripts/`: o TEC.Cqrs não sobe containers nem cria segredos t
 | `unit-tests` | `TEC.Cqrs.Tests` (o projeto inteiro, sem filtro: não há categoria `Integracao`) |
 
 - Gatilhos: `pull_request` e `merge_group` para a `main`, `push` na `main`, `schedule` (segunda 06:00 UTC) e manual.
-- Os unitários rodam em matriz: `net10.0` (com cobertura), `net8.0` e `net10.0` sem ICU.
+- Os unitários rodam em matriz: `net10.0` (com cobertura) e `net10.0` sem ICU.
+- Job próprio `aot` ("Native AOT", fora do workflow central): restaura o `samples/TEC.Cqrs.AotSample` em modo travado
+  pela action `setup-dotnet@v1` (feed `tec-interno`), instala `clang` e `zlib1g-dev`, publica com
+  `dotnet publish -c Release -f net10.0 -r linux-x64 -warnaserror` (qualquer aviso de trimming/AOT quebra o job) e executa
+  o binário nativo, que sai com código 1 se alguma verificação falhar. Permissões do job: `contents: read` e
+  `packages: read`. Ele **não** entra no `ci-ok`: para bloquear o merge, inclua o check `Native AOT` na proteção da `main`.
 - Sem `integration-tests`, `azure-client-id` nem `azure-env`: o job de integração não existe. Sem testes de carga:
   `Carga-CI` e `Carga-Pesada` ficam no `performance.yml`.
 - Permissões: `contents: read` no topo; o job recebe também `pull-requests` e `actions` (leitura), `security-events: write`
@@ -107,12 +113,16 @@ saem do `ci.yml` no push na `main`). Recebe as mesmas entradas do `ci.yml` e mai
 |---|---|
 | `version` | `${{ inputs.versao }}` |
 
-Sequência: valida a versão (precisa ser disparado **da `main`**; a tag `vX.Y.Z` não pode existir) → convenções, pack,
-unitários ×3 (com relatório de cobertura) e CodeQL em paralelo → só com **todos** verdes cria a tag e o Release e publica
-os 3 pacotes no GitHub Packages. Sem testes de carga. `concurrency: publicar-versao`, sem cancelamento.
+Sequência: valida a versão (precisa ser disparado **da `main`**; a versão digitada deve ser igual à `<Version>` do
+`Directory.Build.props`, maior que a última versão lançada e sem a tag `vX.Y.Z`; o workflow reutilizável também confere o
+`ci-ok` da execução mais recente e bloqueia a publicação com PR aberto contra a `main`) → convenções, pack, unitários ×2
+(com relatório de cobertura) e CodeQL em paralelo → só com **todos** verdes cria a tag e o Release e publica os 3 pacotes
+no GitHub Packages. Os jobs de tag/Release e de publicação usam o environment `publicacao`. Sem testes de carga.
+`concurrency: publicar-versao`, sem cancelamento.
 
 Permissões do job: `contents: write` (tag/Release), `packages: write` (push), `actions: read` e `security-events: write`
-(CodeQL), `id-token: write` (exigido pelo workflow de testes).
+(CodeQL), `checks: read` e `pull-requests: read` (portões de publicação), `id-token: write` (exigido pelo workflow de
+testes) e `attestations: write` (atestado SLSA de proveniência dos pacotes).
 
 ---
 
@@ -132,6 +142,7 @@ compartilhado é ruidoso e não pode bloquear PR nem versão.
   `TEC_CARGA_*` específicas continuam como base).
 - Os relatórios por suíte (`api.md`, `performance.md`, `soak.md`, `volume.md`, `security.md`) são gravados em
   `$TEC_CARGA_RELATORIOS` e publicados no resumo da execução.
+- Permissões de cada job: `contents: read`, `packages: read` e `id-token: write` (teto exigido pelo `dotnet-test.yml`).
 
 > [!TIP]
 > Medição de tempo em runner compartilhado tem ruído: compare **tendências** entre execuções, não números absolutos.
@@ -156,8 +167,8 @@ efêmero e não há testes contra serviços externos.
    `dotnet restore TEC.Cqrs.slnx --force-evaluate`.
 3. Atualize o [CHANGELOG](../../CHANGELOG.md) e confira a `Version` do `Directory.Build.props`.
 4. PR → `ci / ci-ok` verde → merge. O CI do push na `main` publica a prévia `<Version>-preview.N`.
-5. Versão estável ou rc: **Actions → Publicar versão → Run workflow** (da `main`) com a versão (ex.: `0.0.1` ou
-   `0.0.1-rc.1`).
+5. Versão estável ou rc: **Actions → Publicar versão → Run workflow** (da `main`) com a versão igual à `Version` do
+   `Directory.Build.props` (ex.: `0.0.1` ou `0.0.1-rc.1`).
 6. Primeira publicação: em *Package settings* de cada pacote, visibilidade **pública** e acesso dos repositórios da
    organização.
 7. Para gerar novas prévias depois de publicar `X.Y.Z`, suba a `Version` do `Directory.Build.props` para a próxima
@@ -181,7 +192,7 @@ efêmero e não há testes contra serviços externos.
 | Controle | Como |
 |---|---|
 | Menor privilégio | `contents: read` no topo; escrita só no `release.yml` e no `publicar-previa` do `ci.yml` (`packages: write`, push na `main`); `id-token: write` só nos jobs de teste |
-| Actions fixadas | Terceiros por SHA, tec-workflows por `v2`; `zizmor` audita; Dependabot com cooldown de 7 dias |
+| Actions fixadas | Terceiros por SHA, tec-workflows por `v1`; `zizmor` audita; Dependabot com cooldown de 7 dias |
 | Sem credencial no disco | `persist-credentials: false` em todo checkout (workflows centrais) |
 | Sem pacote órfão | Tag + Release antes do push; release só com todos os portões verdes |
 | Cadeia de suprimentos | `restore --locked-mode`, `NuGetAudit` como erro, `packageSourceMapping`, CodeQL `security-extended` |

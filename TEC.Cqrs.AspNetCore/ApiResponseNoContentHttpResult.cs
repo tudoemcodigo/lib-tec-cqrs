@@ -22,15 +22,21 @@ public sealed class ApiResponseNoContentHttpResult : IResult, IActionResult, ISt
 {
     private readonly Result _result;
 
+    // Envelope de falha montado uma vez: StatusCode e ExecuteAsync usam o mesmo mapeamento do ApiResponse.FromResult
+    // (ex.: um erro interno em qualquer posição da lista vira 500, não o status do primeiro erro)
+    private readonly ApiResponse? _failure;
+
     internal ApiResponseNoContentHttpResult(Result result)
     {
         _result = result;
+        _failure = result.IsSuccess ? null : ApiResponse.FromResult(result);
     }
 
-    /// <summary>Status HTTP resultante (204 em sucesso ou o mapeado pelo primeiro erro em falha).</summary>
-    public int StatusCode => _result.IsSuccess
-        ? StatusCodes.Status204NoContent
-        : _result.Errors[0].Type.ToHttpStatusCode();
+    /// <summary>
+    /// Status HTTP resultante: 204 em sucesso; em falha, o mesmo status escrito na resposta pelo
+    /// <see cref="ApiResponse.FromResult(Result, string?)"/> (erro interno ou de integração em qualquer posição prevalece).
+    /// </summary>
+    public int StatusCode => _failure?.StatusCode ?? StatusCodes.Status204NoContent;
 
     int? IStatusCodeHttpResult.StatusCode => StatusCode;
 
@@ -42,14 +48,13 @@ public sealed class ApiResponseNoContentHttpResult : IResult, IActionResult, ISt
     {
         ArgumentNullException.ThrowIfNull(httpContext);
 
-        if (_result.IsSuccess)
+        if (_failure is null)
         {
             httpContext.Response.StatusCode = StatusCodes.Status204NoContent;
             return Task.CompletedTask;
         }
 
-        var failureResponse = ApiResponse.FromResult(_result);
-        return ApiResponseWriter.WriteAsync(httpContext, failureResponse, location: null, locationRejected: false);
+        return ApiResponseWriter.WriteAsync(httpContext, _failure, location: null, locationRejected: false);
     }
 
     /// <inheritdoc />

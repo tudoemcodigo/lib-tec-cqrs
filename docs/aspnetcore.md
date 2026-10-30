@@ -15,6 +15,7 @@
   - [Formato das respostas](#formato-das-respostas)
   - [Paginação](#paginação)
   - [Recurso criado e Location](#recurso-criado-e-location)
+  - [Concorrência otimista com ETag e If-Match](#concorrência-otimista-com-etag-e-if-match)
   - [Tratamento global de exceções](#tratamento-global-de-exceções)
   - [OpenAPI](#openapi)
 - [⚙️ Opções](#️-opções)
@@ -44,8 +45,9 @@ flowchart LR
 |---|---|---|
 | `CqrsBuilderAspNetCoreExtensions.AddAspNetCore` | `TEC.Cqrs.DependencyInjection` | Registra a integração (encadeado no `AddTecCqrs`) |
 | `CqrsAspNetCoreOptions` | `TEC.Cqrs.AspNetCore` | `JsonTypeInfoResolver`, `ReplaceExistingPrincipalAccessor` |
-| `ResultHttpExtensions` | `TEC.Cqrs.AspNetCore` | `ToHttpResult` e `ToCreatedHttpResult` |
-| `ApiResponseHttpResult<TResponse>` / `ApiResponseCreatedHttpResult<T>` | `TEC.Cqrs.AspNetCore` | Resultados HTTP (`IResult` e `IActionResult`) com metadados OpenAPI |
+| `ResultHttpExtensions` | `TEC.Cqrs.AspNetCore` | `ToHttpResult`, `ToCreatedHttpResult` e `ToNoContentHttpResult` |
+| `ApiResponseHttpResult<TResponse>` / `ApiResponseCreatedHttpResult<T>` / `ApiResponseNoContentHttpResult` | `TEC.Cqrs.AspNetCore` | Resultados HTTP (`IResult` e `IActionResult`) com metadados OpenAPI |
+| `HttpConcurrencyExtensions` | `TEC.Cqrs.AspNetCore` | `ETag` e `If-Match` para concorrência otimista |
 | `ApplicationBuilderExtensions.UseTecExceptionHandler` | `TEC.Cqrs.AspNetCore` | Tratamento global de exceções |
 | `AddIdempotency`, `UseTecIdempotency`, `.WithIdempotency()` | `TEC.Cqrs.AspNetCore` (`.Idempotency`) | Idempotência por `Idempotency-Key` ([🔁 Idempotência](idempotencia.md)) |
 
@@ -103,7 +105,14 @@ app.MapDelete("/clientes/{id:guid}", (Guid id, ISender sender, CancellationToken
 ```
 
 As extensões existem para `Result`, `Result<T>`, `Result<PagedResult<T>>` e para as respectivas `Task<...>`, com uma
-mensagem de sucesso opcional (`successMessage`).
+mensagem de sucesso opcional (`successMessage`). `ToNoContentHttpResult()` (para `Result` e `Task<Result>`) responde 204
+sem corpo em sucesso e o envelope de falha nos demais casos (o `StatusCode` do resultado é o mesmo escrito na resposta,
+com o mapeamento do `ApiResponse.FromResult`: um erro interno em qualquer posição vira 500):
+
+```csharp
+app.MapDelete("/clientes/{id:guid}/cache", (Guid id, ISender sender, CancellationToken ct) =>
+    sender.Send(new ClearCustomerCacheCommand(id), ct).ToNoContentHttpResult());
+```
 
 ### Controllers
 
@@ -130,6 +139,7 @@ acentos sem escape):
 | `Result` de sucesso | 200 | `success`, `statusCode`, `message` (opcional), `timestamp` |
 | `Result<T>` de sucesso | 200 | idem + `data` |
 | `ToCreatedHttpResult` de sucesso | 201 | idem + `data` e cabeçalho `Location` |
+| `ToNoContentHttpResult` de sucesso | 204 | Sem corpo |
 | Falha | pelo `ErrorType` do primeiro erro | `errors` (`code`, `message`, `field`), `traceId` |
 | Falha com algum erro interno (`Failure`/`ExternalService`) | 500 / 502 | Mensagem genérica, **sem** `errors` |
 
@@ -180,6 +190,19 @@ Em falha, o envelope não tem `data` nem `pagination` (o mesmo JSON de qualquer 
 | `/clientes/João Silva` | `Location: /clientes/Jo%C3%A3o%20Silva` (escapado por segmento; `%XX` já escapado é mantido) |
 | `https://outro.site/x`, `//host/x`, com `\` ou caractere de controle | **Sem** `Location` (redirecionamento aberto ou injeção de cabeçalho); resposta continua 201 e um aviso vai para o log, sem a URL |
 
+### Concorrência otimista com ETag e If-Match
+
+`HttpConcurrencyExtensions` (namespace `TEC.Cqrs.AspNetCore`) converte o `RowVersion` de uma entidade em `ETag` e lê o
+`If-Match` da requisição:
+
+| Membro | O que faz |
+|---|---|
+| `GerarETag(byte[]? rowVersion)` | `ETag` entre aspas, com o `rowVersion` em Base64; `null` ou vazio gera `""` |
+| `response.SetETag(rowVersion)` | Define o cabeçalho `ETag`; sem `rowVersion` (`null` ou vazio), não define nada |
+| `request.GetIfMatchRowVersion()` / `ExtrairRowVersion(string?)` | Devolve os bytes do `If-Match` (aceita aspas e o prefixo `W/`, até 32 bytes). Cabeçalho ausente, vazio ou `*` devolve `null`; valor que não é Base64 válido devolve um token sentinela que não coincide com nenhum `RowVersion` real |
+
+O pacote só converte os valores: comparar o `RowVersion` e responder 412 ou 409 fica no handler da aplicação.
+
 ### Tratamento global de exceções
 
 ```csharp
@@ -193,9 +216,8 @@ app.UseTecExceptionHandler();
 | `BadHttpRequestException` (JSON malformado, corpo grande demais) | Status 4xx da exceção, mensagem genérica (`Requisição inválida.`, `O corpo da requisição excede o tamanho máximo permitido.`...) | Não |
 | Qualquer outra | 500 `Ocorreu um erro interno. Tente novamente mais tarde.` | Sim, **uma vez** |
 
-Exceções já registradas pelo pipeline do mediator não são registradas de novo. No .NET 10 o middleware usa o
-`UseExceptionHandler` do ASP.NET Core (com `SuppressDiagnosticsCallback`); no .NET 8, um middleware próprio com o mesmo
-comportamento.
+Exceções já registradas pelo pipeline do mediator não são registradas de novo: o middleware usa o `UseExceptionHandler`
+do ASP.NET Core com `SuppressDiagnosticsCallback`.
 
 > [!TIP]
 > Num tratamento global próprio, use `CqrsDiagnostics.IsExceptionLogged(exception)` para não registrar duas vezes uma
@@ -203,9 +225,9 @@ comportamento.
 
 ### OpenAPI
 
-`ApiResponseHttpResult<TResponse>` e `ApiResponseCreatedHttpResult<T>` implementam `IEndpointMetadataProvider`: sem
-`.Produces(...)`, o OpenAPI do endpoint já descreve o sucesso (200 com `TResponse`, ou 201 com `ApiResponse<T>`) e as
-falhas 400, 401, 403, 404, 409, 422, 429, 500 e 502 com `ApiResponse`.
+`ApiResponseHttpResult<TResponse>`, `ApiResponseCreatedHttpResult<T>` e `ApiResponseNoContentHttpResult` implementam
+`IEndpointMetadataProvider`: sem `.Produces(...)`, o OpenAPI do endpoint já descreve o sucesso (200 com `TResponse`, 201
+com `ApiResponse<T>` ou 204 sem corpo) e as falhas 400, 401, 403, 404, 409, 422, 429, 500 e 502 com `ApiResponse`.
 
 ---
 

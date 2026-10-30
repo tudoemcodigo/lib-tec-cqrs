@@ -63,7 +63,7 @@ flowchart LR
 
 | Item | Detalhe |
 |---|---|
-| SDK | .NET 10 (`global.json`: `10.0.401`, `rollForward: latestPatch`) e o runtime 8.0 para rodar os testes em `net8.0` |
+| SDK | .NET 10 (`global.json`: `10.0.402`, `rollForward: latestPatch`). O único alvo é `net10.0` |
 | Feed `tec-interno` | Leitura obrigatória no modo pacote, o padrão (PAT classic com `read:packages`; o GitHub Packages exige token mesmo para pacote público) |
 | Docker, Azure CLI | Não são necessários: o TEC.Cqrs não tem testes de integração externa |
 
@@ -102,7 +102,7 @@ dotnet pack TEC.Cqrs.slnx -c Release -o ./pacotes      # só os 3 projetos de pa
 ```
 
 O `dotnet pack` gera `TEC.Cqrs`, `TEC.Cqrs.AspNetCore` e `TEC.Cqrs.FluentValidation` **com a mesma versão**
-(`Directory.Build.props`), cada um com o `README.md` da própria pasta, `lib/net8.0`, `lib/net10.0` e a documentação XML.
+(`Directory.Build.props`), cada um com o `README.md` da própria pasta, `lib/net10.0` e a documentação XML.
 Samples e projetos de teste não são empacotados.
 
 > [!IMPORTANT]
@@ -110,10 +110,13 @@ Samples e projetos de teste não são empacotados.
 > antes do PR. Categorias e carga: [🧪 Testes](testes.md).
 
 > [!NOTE]
-> O núcleo expõe os internos aos satélites (`InternalsVisibleTo`), inclusive o polyfill `System.Threading.Lock` do
-> `net8.0` (`build/Polyfills`). Por isso os satélites removem a cópia local do polyfill
-> (`<Compile Remove="$(TecRepoRoot)build/Polyfills/Lock.cs" />`) e usam a do núcleo — e é por isso também que os três
-> pacotes precisam ser usados na mesma versão.
+> O núcleo expõe os internos aos satélites (`InternalsVisibleTo`): os satélites usam helpers internos dele, e por isso os
+> três pacotes precisam ser usados na mesma versão.
+
+> [!TIP]
+> Para conferir o Native AOT localmente: `dotnet publish samples/TEC.Cqrs.AotSample -c Release -f net10.0 -r <rid>` e
+> execute o binário. No Windows, o link exige o workload "Desenvolvimento para desktop com C++" do Visual Studio; no
+> Linux, `clang` e `zlib1g-dev`. O CI faz o mesmo no job `Native AOT`.
 
 ### Lock files
 
@@ -127,7 +130,7 @@ dotnet restore TEC.Cqrs.slnx --force-evaluate
 
 > [!WARNING]
 > Regenerar o lock versionado (e compilar no modo padrão) exige que as versões TEC.* referenciadas **já estejam publicadas** no feed (ordem: Core →
-> Vault → Cqrs → Security → Observability → ORM). Enquanto o `TEC.Core` 0.0.1 não estiver no feed, esse restore falha.
+> Vault → Cqrs → Security → Observability → ORM). Se a versão do `TEC.Core` declarada no `Directory.Packages.props` não estiver no feed, esse restore falha.
 
 ### Rodar os samples
 
@@ -176,7 +179,6 @@ repositório: `Directory.Build.props` (`TecComponent` e `Version`), `Directory.P
 | `401`/`403` no restore | PAT sem `read:packages` ou expirado | Gere outro PAT classic e refaça o `dotnet nuget update source tec-interno` |
 | `NU1004` no restore | Lock file desatualizado | Regenere com `dotnet restore TEC.Cqrs.slnx --force-evaluate` |
 | `NU1901`–`NU1904` | Vulnerabilidade conhecida em dependência (inclusive transitiva) | Atualize o pacote no `Directory.Packages.props` e regenere os locks |
-| `CS0436` (tipo `Lock` duplicado) num satélite | Polyfill compilado de novo no satélite | Mantenha o `<Compile Remove=".../Lock.cs" />` do csproj do satélite |
 | `dotnet test` roda 0 testes (código 5) | `-nologo` no Microsoft.Testing.Platform | Remova `-nologo` |
 
 ---

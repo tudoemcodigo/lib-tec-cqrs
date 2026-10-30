@@ -23,12 +23,18 @@ internal static partial class IdempotencyLog
     [LoggerMessage(1022, LogLevel.Debug, "Idempotency-Key ignorada: requisição sem usuário identificado (sem escopo seguro).")]
     public static partial void AnonymousRequest(ILogger logger);
 
-    [LoggerMessage(1023, LogLevel.Warning, "Requisição idempotente interrompida pelo cliente depois de uma resposta de sucesso: a reserva foi mantida até o LockTimeout (a operação pode ter sido confirmada).")]
-    public static partial void AbortedAfterSuccess(ILogger logger);
+    [LoggerMessage(1023, LogLevel.Warning, "Requisição idempotente interrompida pelo cliente depois de a operação ter efeito (transação confirmada ou resposta de sucesso já escrita): a reserva foi mantida até o LockTimeout.")]
+    public static partial void AbortedAfterEffect(ILogger logger);
 
     [LoggerMessage(1024, LogLevel.Warning, "Idempotency-Key ignorada: usuário autenticado sem nenhum dos UserIdClaimTypes (sem escopo). Revise IdempotencyOptions.UserIdClaimTypes.")]
     public static partial void UserWithoutIdClaim(ILogger logger);
 
     [LoggerMessage(1025, LogLevel.Error, "Requisição idempotente recusada (500): o endpoint exige Idempotency-Key, mas o usuário autenticado não tem nenhum dos UserIdClaimTypes. Revise IdempotencyOptions.UserIdClaimTypes.")]
     public static partial void RequiredKeyWithoutScope(ILogger logger);
+
+    [LoggerMessage(1026, LogLevel.Warning, "Falha ao guardar a resposta idempotente na tentativa {Attempt} ({ExceptionType}): nova tentativa em seguida.")]
+    public static partial void CompleteRetrying(ILogger logger, string? exceptionType, int attempt);
+
+    [LoggerMessage(1027, LogLevel.Error, "Resposta idempotente não guardada após {Attempts} tentativas ({ExceptionType}). A resposta foi enviada ao cliente, mas a reserva fica pendente até o LockTimeout: depois dele, a mesma chave pode executar a operação de novo.")]
+    public static partial void CompleteFailed(ILogger logger, string? exceptionType, int attempts);
 }

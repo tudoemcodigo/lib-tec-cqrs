@@ -33,7 +33,7 @@ public class PipelinePerformanceTests
         var user = OrdersHost.User(SampleData.CustomerId(1));
         var orderId = SampleData.OrderId(1, 0);
 
-        // Orçamentos com folga (cerca do dobro do medido no .NET 8 e no .NET 10: ~3,7 KB, ~4,3 KB, ~8 KB e ~6,3 KB por
+        // Orçamentos com folga (cerca do dobro do medido no .NET 10: ~3,7 KB, ~4,3 KB, ~8 KB e ~6,3 KB por
         // Send): o objetivo é pegar regressões grosseiras, como reflexão ou alocações por item no caminho quente, não
         // medir a máquina
         (string Scenario, long Budget, Func<Measurement> Measure)[] scenarios =

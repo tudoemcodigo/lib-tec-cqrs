@@ -120,33 +120,33 @@ internal sealed class IdempotencyMiddleware(RequestDelegate next, IOptions<Idemp
     /// Executa o endpoint com a resposta em buffer (nada vai ao cliente durante a execução), guarda a resposta 2xx e só
     /// então a envia: a entrega ao cliente (que pode ter desconectado) não decide se a chave é liberada.
     /// </summary>
+    /// <remarks>
+    /// Com exceção ou cancelamento pelo cliente, a chave só é liberada se nada tiver sido efetivado
+    /// (<see cref="HasTakenEffect"/>): sem transação confirmada e sem resposta de sucesso escrita. O status sozinho não
+    /// conta: ele começa em 200 e o endpoint pode defini-lo antes de executar a operação.
+    /// </remarks>
     private async Task ExecuteAsync(HttpContext context, IIdempotencyStore store, IdempotencyKey key, Guid lockId)
     {
         var original = context.Response.Body;
         var capture = new CaptureStream(original, _options.MaxResponseBodyBytes);
         await using var disposeCapture = capture.ConfigureAwait(false);
         context.Response.Body = capture;
-        bool isCommitted = false;
         try
         {
             await next(context).ConfigureAwait(false);
-            isCommitted = context.RequestServices.GetService<PipelineContext>()?.HasCommittedTransaction == true;
         }
-        catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested
-                                                 && (isCommitted || context.RequestServices.GetService<PipelineContext>()?.HasCommittedTransaction == true || context.Response.StatusCode is >= 200 and <= 299))
+        catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested && HasTakenEffect(context, capture))
         {
-            // O cliente desconectou e a operação foi confirmada: a reserva é mantida (a repetição recebe 409 até o
+            // O cliente desconectou depois de a operação ter efeito: a reserva é mantida (a repetição recebe 409 até o
             // LockTimeout), em vez de liberar a chave e arriscar executar de novo
-            IdempotencyLog.AbortedAfterSuccess(logger);
+            IdempotencyLog.AbortedAfterEffect(logger);
             throw;
         }
         catch
         {
-            // A chave só é liberada se a transação ainda não tiver sido confirmada
-            if (!isCommitted && context.RequestServices.GetService<PipelineContext>()?.HasCommittedTransaction != true)
-            {
+            // Nada efetivado (cancelamento antes do commit, exceção antes da resposta): libera para nova tentativa
+            if (!HasTakenEffect(context, capture))
                 await store.AbandonAsync(key, lockId, CancellationToken.None).ConfigureAwait(false);
-            }
             throw;
         }
         finally
@@ -154,7 +154,7 @@ internal sealed class IdempotencyMiddleware(RequestDelegate next, IOptions<Idemp
             context.Response.Body = original;
         }
 
-        isCommitted = isCommitted || context.RequestServices.GetService<PipelineContext>()?.HasCommittedTransaction == true;
+        bool isCommitted = HasCommittedTransaction(context);
         var status = context.Response.StatusCode;
         if (status is < 200 or > 299 || capture.Overflowed)
         {
@@ -175,13 +175,56 @@ internal sealed class IdempotencyMiddleware(RequestDelegate next, IOptions<Idemp
                 headers[name] = header[0]!;
         }
 
-        // Guarda antes de enviar: se o envio falhar (cliente desconectado), a repetição recebe a resposta guardada
+        // Guarda antes de enviar: se o envio falhar (cliente desconectado), a repetição recebe a resposta guardada. Se o
+        // store falhar mesmo depois das novas tentativas, a resposta é enviada assim mesmo: a operação já foi executada
         var response = new IdempotentResponse(status, context.Response.ContentType, headers, capture.Captured);
-        if (!await store.CompleteAsync(key, lockId, response, CancellationToken.None).ConfigureAwait(false))
-            IdempotencyLog.LockLost(logger);
+        await CompleteWithRetryAsync(store, key, lockId, response).ConfigureAwait(false);
 
         await capture.SendBufferedAsync().ConfigureAwait(false);
     }
+
+    /// <summary>Esperas entre as tentativas de guardar a resposta (curtas e limitadas: 3 tentativas, cerca de 250 ms no total).</summary>
+    internal static readonly TimeSpan[] CompleteRetryDelays = [TimeSpan.FromMilliseconds(50), TimeSpan.FromMilliseconds(200)];
+
+    /// <summary>
+    /// Guarda a resposta com novas tentativas se o store lançar exceção (ex.: banco instável). Esgotadas as tentativas,
+    /// registra erro (só o tipo da exceção, sem chave, corpo ou mensagem) e retorna: a reserva fica pendente até o
+    /// <see cref="IdempotencyOptions.LockTimeout"/>.
+    /// </summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types",
+        Justification = "A operação já foi executada: qualquer falha do store é registrada e a resposta é enviada ao cliente.")]
+    private async Task CompleteWithRetryAsync(IIdempotencyStore store, IdempotencyKey key, Guid lockId, IdempotentResponse response)
+    {
+        for (int attempt = 1; ; attempt++)
+        {
+            try
+            {
+                if (!await store.CompleteAsync(key, lockId, response, CancellationToken.None).ConfigureAwait(false))
+                    IdempotencyLog.LockLost(logger);
+                return;
+            }
+            catch (Exception ex) when (attempt <= CompleteRetryDelays.Length)
+            {
+                IdempotencyLog.CompleteRetrying(logger, ex.GetType().FullName, attempt);
+                await Task.Delay(CompleteRetryDelays[attempt - 1], CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                IdempotencyLog.CompleteFailed(logger, ex.GetType().FullName, attempt);
+                return;
+            }
+        }
+    }
+
+    /// <summary>
+    /// A operação teve efeito: transação do pipeline confirmada neste escopo ou resposta de sucesso já escrita (guardada no
+    /// buffer ou repassada ao cliente). Só o status 2xx, sem bytes, não conta.
+    /// </summary>
+    private static bool HasTakenEffect(HttpContext context, CaptureStream capture) =>
+        HasCommittedTransaction(context) || (capture.HasWrittenBytes && context.Response.StatusCode is >= 200 and <= 299);
+
+    private static bool HasCommittedTransaction(HttpContext context) =>
+        context.RequestServices.GetService<PipelineContext>()?.HasCommittedTransaction == true;
 
     private async Task ReplayAsync(HttpContext context, IdempotentResponse response)
     {
@@ -313,6 +356,9 @@ internal sealed class CaptureStream(Stream inner, int maxBytes) : Stream
 
     /// <summary>A resposta passou do limite e está sendo repassada direto ao cliente.</summary>
     public bool Overflowed => _buffer is null;
+
+    /// <summary>O endpoint já escreveu ao menos um byte da resposta (no buffer ou direto ao cliente).</summary>
+    public bool HasWrittenBytes => _buffer is null || _buffer.Length > 0;
 
     /// <summary>Resposta guardada (sem cópia; vazia se <see cref="Overflowed"/>).</summary>
     public ReadOnlyMemory<byte> Captured => _buffer is null

@@ -65,4 +65,4 @@ Opções (`JsonTypeInfoResolver`, `ReplaceExistingPrincipalAccessor`), formato d
 tratamento de exceções: [docs/aspnetcore.md](https://github.com/tudoemcodigo/lib-tec-cqrs/blob/main/docs/aspnetcore.md).
 Idempotência: [docs/idempotencia.md](https://github.com/tudoemcodigo/lib-tec-cqrs/blob/main/docs/idempotencia.md).
 
-`net8.0` e `net10.0` · Native AOT · [MIT](https://github.com/tudoemcodigo/lib-tec-cqrs/blob/main/LICENSE) · Roberto Oliveira, equipe Tudo em Código
+`net10.0` · Native AOT · [Apache 2.0](https://github.com/tudoemcodigo/lib-tec-cqrs/blob/main/LICENSE) · Roberto Oliveira, equipe Tudo em Código

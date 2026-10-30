@@ -78,7 +78,7 @@ public static class ServiceCollectionExtensions
         }
 
         services.AddSingleton(options);
-        services.AddSingleton(new CqrsRegistry(options));
+        services.AddSingleton(new CqrsRegistry(options, services));
         services.TryAddSingleton(sp => new CqrsMetrics(sp.GetService<IMeterFactory>()));
         services.AddScoped<PipelineContext>();
         services.AddScoped<IMediator, Mediator>();

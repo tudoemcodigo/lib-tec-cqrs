@@ -9,36 +9,37 @@ Este arquivo complementa as instruções herdadas de `AGENT_BASE.md`. O TEC.Cqrs
 - Mudanças em APIs públicas do mediator, pipeline behaviors, contratos de autorização (`IRequestAuthorizer`, `IPermissionChecker`), validação (`IRequestValidator`), idempotência ou alvos .NET exigem revisão de compatibilidade, documentação, changelog e consumidores.
 - Testes devem atravessar contratos públicos e verificar resultados observáveis. Para mudanças de comportamento, cubra entradas inválidas, limites, falhas e concorrência quando aplicável.
 - Trate todo dado externo como não confiável. Não exponha segredos, PII ou conteúdo controlado pelo usuário em exceções, logs, URLs ou sumários.
-- O pipeline falha fechado: autorização e validação obrigatórias são verificadas na subida; command sem `[AuthorizeRequest]` ou validador derruba o host.
+- O pipeline falha fechado: a autorização declarada é verificada no `AddTecCqrs` (requisição sem `[AuthorizeRequest]`, `[RequirePermission]`, `IRequestAuthorizer` ou `[AllowAnonymousRequest]` derruba a subida) e o validador obrigatório, na subida do host com `.AddAspNetCore()` (sem ele, na primeira execução do command).
 
 ## Mapa da implementação
 
-- `TEC.Cqrs/`: biblioteca multi-target (`net8.0` e `net10.0`), núcleo do mediator e pipeline.
-  - `Abstractions/`: `ICommand`, `IQuery`, `INotification`, `ISender`, `IPublisher`, `ICommandHandler`, `IQueryHandler`, `INotificationHandler`, `IRequestAuthorizer`, `IRequestValidator`, `IPermissionChecker`, `IUnitOfWork`, `IPrincipalAccessor`.
-  - `Pipeline/`: behaviors ordenados (Logging, Exceções, Autorização, Validação, Behaviors próprios, Performance, Transação) + `PublishAfterCommit`.
-  - `Authorization/`: `[AuthorizeRequest]`, `[AllowAnonymousRequest]`, `[RequirePermission]`, `TecPrincipalKinds`, `FallbackPolicy` fechada.
-  - `Validation/`: validação obrigatória, `AbstractValidator` do FluentValidation, `[SkipValidation]`.
-  - `Idempotency/`: `Idempotency-Key` com reserva contra requisições simultâneas (`SingleFlight`).
-  - `Telemetry/`: `ActivitySource` e `Meter` `TEC.Cqrs` da BCL; assinados pelo TEC.Observability via prefixo `TEC.*`.
-  - `DependencyInjection/`: `AddTecCqrs`, registro explícito (`AddCommandHandler`, `AddQueryHandler`, `AddNotificationHandler`) para AOT.
+- `TEC.Cqrs/`: biblioteca `net10.0` (alvo único), núcleo do mediator e pipeline.
+  - `Abstractions/`: `IRequest`/`IBaseRequest`/`ICommand`/`IQuery` (`IRequest.cs`), `IRequestHandler`/`ICommandHandler`/`IQueryHandler`, `IMediator`/`ISender`/`IPublisher`, `INotification`/`INotificationHandler`, `IPipelineBehavior`, `IExceptionErrorMapper`.
+  - `Behaviors/`: behaviors em ordem (Logging, Exceções, Autorização, Validação, behaviors próprios, Performance, Transação). `PublishAfterCommit` fica em `Internal/Mediator.cs`.
+  - `Authorization/`: `[AuthorizeRequest]`, `[AllowAnonymousRequest]`, `[RequirePermission]`, `IRequestAuthorizer`, `IPermissionChecker`/`ClaimPermissionChecker`, `IPrincipalAccessor`, `IRequestPolicyEvaluator`.
+  - `Persistence/`: `IUnitOfWork` e `[SkipTransaction]`.
+  - `Validation/`: `IRequestValidator` (abstração neutra; o FluentValidation fica no satélite) e `[SkipValidation]`.
+  - `Idempotency/`: `IIdempotencyStore` (reserva `TryBegin`/`Complete`/`Abandon`) e `InMemoryIdempotencyStore`; o middleware HTTP fica no `TEC.Cqrs.AspNetCore`.
+  - `Diagnostics/`: `CqrsDiagnostics` (`ActivitySource` e `Meter` `TEC.Cqrs` da BCL, assinados pelo TEC.Observability via prefixo `TEC.*`, e as verificações `Find*` para testes).
+  - `Internal/`: mediator, `CqrsRegistry`, `PipelineContext`, métricas, logs e consultas ao container.
+  - `DependencyInjection/`: `AddTecCqrs`, `CqrsOptions`, `ICqrsBuilder`, registro explícito (`AddCommandHandler`, `AddQueryHandler`, `AddNotificationHandler`, `AddRequestAuthorizer`, `AddRequestValidator`) para AOT.
 - `TEC.Cqrs.AspNetCore/`: integração ASP.NET Core (Minimal APIs, Controllers, OpenAPI), `ToHttpResult`, `UseTecExceptionHandler`, idempotência HTTP.
 - `TEC.Cqrs.FluentValidation/`: executa `AbstractValidator<T>` no pipeline, um erro por campo.
-- `TEC.Cqrs.Tests/`: testes de pipeline, regressão, segurança, robustez, permissões, idempotência, HTTP e divisão dos pacotes (TUnit + FsCheck).
+- `TEC.Cqrs.Tests/`: testes de pipeline, regressão, segurança, robustez, permissões, idempotência, HTTP e divisão dos pacotes (TUnit).
 - `TEC.Cqrs.LoadTests/`: carga rápida (`Carga-CI`) e suítes pesadas (`Carga-Pesada`: vazão, volume, soak, carga sustentada).
-- `TEC.Cqrs.Benchmarks/`: medições BenchmarkDotNet.
-- `samples/`: API de pedidos de exemplo e gerador de carga HTTP.
+- `samples/`: API de pedidos de exemplo, gerador de carga HTTP e `TEC.Cqrs.AotSample` (publicado com Native AOT no job "Native AOT" do CI).
 - `build/`: props/targets compartilhados de compilação.
-- `docs/adr/`: decisões arquiteturais alinhadas ao livro *CQRS na Prática* (ADR-0001 a ADR-0010).
+- `docs/adr/`: decisões arquiteturais alinhadas ao livro *CQRS na Prática* (ADR-0001 a ADR-0011).
 - `docs/`: guias por pipeline, autorização, validação, transação, idempotência, ASP.NET Core, AOT, segurança, testes, desenvolvimento.
 
 ## Contratos relevantes
 
 - `Directory.Build.props` é a fonte única de versão do pacote (uma versão para os três pacotes). A versão inicial é `0.0.1`; não introduza versões nos `.csproj`.
-- `Directory.Packages.props` pode declarar versões distintas por TFM para `Microsoft.Extensions.*`; condições por TFM são intencionais.
+- O único alvo é `net10.0` (vem do `build/Tec.Build.props` canônico): `Directory.Packages.props` declara uma versão por pacote, sem condições por TFM. Não reintroduza `#if NET*` nem polyfills.
 - Dependências TEC.* são declaradas com `<TecReference Include="..." />`, não com `PackageReference` direto.
 - `Result`/`Error` do TEC.Core é o contrato de retorno; exceções de fluxo esperado não cruzam o pipeline (são convertidas em `Result`).
 - `IUnitOfWork` do TEC.ORM é consumido pelo pipeline para transação por command; command interno que falha desfaz o externo inteiro.
-- `ICurrentUser` do TEC.Core chega ao pipeline via `IPrincipalAccessor`; integração com TEC.Security é por abstração, não dependência direta.
+- O `ClaimsPrincipal` do usuário chega ao pipeline via `IPrincipalAccessor` (o TEC.Cqrs não usa o `ICurrentUser` do TEC.Core); integração com TEC.Security é por abstração, não dependência direta.
 - Workflows dos consumidores chamam `tudoemcodigo/tec-workflows`; confira as tags realmente publicadas antes de alterar referências.
 - A licença é Apache-2.0. Mantenha `LICENSE`, `NOTICE`, badge/README e `<PackageLicenseExpression>` coerentes.
 

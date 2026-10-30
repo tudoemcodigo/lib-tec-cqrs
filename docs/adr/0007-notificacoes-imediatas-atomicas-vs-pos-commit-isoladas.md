@@ -24,7 +24,7 @@ A interface `IPublisher` separa formalmente duas modalidades de publicação com
 2. **`IPublisher.PublishAfterCommit` (Publicação Adiada Pós-Commit):**
    - As notificações são acumuladas na fila do `RequestFrame` atual do `PipelineContext`.
    - Se o comando falhar ou a transação sofrer rollback, a fila inteira é sumariamente descartada.
-   - Somente após a confirmação bem-sucedida da transação (`Committed == true`), o `Mediator` despacha as notificações acumuladas.
+   - Somente após a confirmação bem-sucedida da transação (`Committed == true`), o `Mediator` despacha as notificações acumuladas. Sem transação do pipeline (query, `[SkipTransaction]` ou sem `IUnitOfWork`), a publicação ocorre quando a requisição mais externa termina com sucesso.
 3. **Isolamento de Falhas e Tolerância (*Fail-Safe* Pós-Commit):**
    - Na publicação pós-commit (`PublishIsolatedAsync`), cada handler é executado isoladamente. Falhas individuais são registradas em log com nível de erro (`DeferredNotificationFailed`, evento 1008; falha ao criar os handlers: evento 1009) e telemetria, **sem interromper** os demais handlers e **sem alterar** o resultado já confirmado retornado ao chamador.
 4. **Proteção Contra Recursão Excessiva (`MaxDeferredRounds`):**
@@ -36,7 +36,7 @@ A interface `IPublisher` separa formalmente duas modalidades de publicação com
 
 ### Positivas
 - **Fim dos Efeitos Colaterais Fantasmas:** E-mails e integrações externas só disparam após o commit consolidado.
-- **Resiliência Máxima:** Falha em um consumidor desacoplado não afeta a confirmação da transação principal.
+- **Isolamento de falhas:** Falha em um handler pós-commit é registrada em log e não afeta a transação já confirmada nem os demais handlers.
 - **Suporte Nativo a Outbox:** Permite orquestrar com clareza o que é atômico no banco versus o que é comunicação pós-efetivação.
 
 ### Negativas / Limitações

@@ -73,4 +73,4 @@ Result<int> closed = await sender.Send(new CloseDayCommand(DateOnly.FromDateTime
 Commands e queries, mediator, pipeline, autorização, permissões, validação, notificações, transação, idempotência,
 observabilidade, opções e Native AOT: [docs/README.md](https://github.com/tudoemcodigo/lib-tec-cqrs/blob/main/docs/README.md).
 
-`net8.0` e `net10.0` · Native AOT · [MIT](https://github.com/tudoemcodigo/lib-tec-cqrs/blob/main/LICENSE) · Roberto Oliveira, equipe Tudo em Código
+`net10.0` · Native AOT · [Apache 2.0](https://github.com/tudoemcodigo/lib-tec-cqrs/blob/main/LICENSE) · Roberto Oliveira, equipe Tudo em Código

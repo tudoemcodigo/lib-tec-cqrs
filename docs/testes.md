@@ -28,7 +28,7 @@
 flowchart LR
     T["dotnet test"] --> U["TEC.Cqrs.Tests<br/><sub>projeto inteiro</sub>"]
     T --> L["TEC.Cqrs.LoadTests"]
-    U --> M["net10.0 · net8.0 · sem ICU"]
+    U --> M["net10.0 · sem ICU"]
     L --> CI["Carga-CI<br/><sub>segundos · performance.yml manual</sub>"]
     L --> HV["Carga-Pesada<br/><sub>Explicit · performance.yml manual</sub>"]
     HV --> F["× TEC_CARGA_FATOR"]
@@ -38,14 +38,14 @@ flowchart LR
 
 | Projeto | Categoria | Conteúdo | Quantidade |
 |---|---|---|---:|
-| `TEC.Cqrs.Tests` | *(sem categoria)* | Mediator, pipeline, transação, segurança, permissões, idempotência, robustez, regressão, observabilidade, HTTP e divisão dos pacotes | 280 (`net10.0`) · 287 (`net8.0`) |
+| `TEC.Cqrs.Tests` | *(sem categoria)* | Mediator, pipeline, transação, segurança, permissões, idempotência, robustez, regressão, observabilidade, HTTP e divisão dos pacotes | cerca de 300 (`net10.0`) |
 | `TEC.Cqrs.LoadTests` | `Carga-CI` | Concorrência, alocação por `Send`, segurança sob carga e fumaça HTTP na API de exemplo | 13 |
 | `TEC.Cqrs.LoadTests` | `Carga-Pesada` | Vazão, volume, soak e carga sustentada na API de exemplo (`[Explicit]`) | 7 (~4–5 min com fator 1) |
 
 - Framework: **TUnit** sobre o Microsoft.Testing.Platform (`global.json` → `"test": { "runner": "Microsoft.Testing.Platform" }`).
-  Os dois projetos são `Exe`, `net8.0` e `net10.0`, `IsPackable=false`.
-- O `net8.0` roda alguns testes a mais: o middleware de exceções próprio do .NET 8 (no .NET 10 o
-  `UseTecExceptionHandler` usa o do ASP.NET Core).
+  Os dois projetos são `Exe`, `net10.0`, `IsPackable=false`.
+- Native AOT não é testado pelo `dotnet test`: o job `Native AOT` do `ci.yml` publica o `samples/TEC.Cqrs.AotSample` com
+  `PublishAot` e executa o binário (veja [⚡ AOT](aot.md)).
 - **Não há testes de integração externa** (categoria `Integracao`) nem variáveis `TEC_TESTES_*`: o TEC.Cqrs não acessa
   rede, banco nem cofre. O `IUnitOfWork` dos testes é em memória.
 - As categorias de carga ficam na classe `TestCategories` (`LoadCi = "Carga-CI"`, `LoadHeavy = "Carga-Pesada"`). Testes
@@ -59,11 +59,8 @@ flowchart LR
 ### Rodar localmente
 
 ```bash
-# Unitários (os dois alvos), como no CI
+# Unitários, como no CI
 dotnet test --project TEC.Cqrs.Tests -c Release
-
-# Um alvo só
-dotnet test --project TEC.Cqrs.Tests -c Release -f net8.0
 
 # Sem ICU (como em containers mínimos)
 DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 dotnet test --project TEC.Cqrs.Tests -c Release -f net10.0
@@ -92,13 +89,13 @@ TEC_CARGA_FATOR=0.1 TEC_CARGA_RELATORIOS=./relatorios \
 | `TransactionTests.cs` | Commit/rollback, falha no commit, query e `[SkipTransaction]` sem transação, command aninhado, sem `IUnitOfWork` |
 | `SecurityTests.cs` | Autorização (atributos, authorizers, policies), validação obrigatória, verificações de inicialização, vazamento de dados |
 | `PermissionTests.cs` | `[RequirePermission]` (todas e qualquer uma), `IPermissionChecker`, claim configurável, `FindRequestsWithoutPermission` |
-| `IdempotencyTests.cs` | `InMemoryIdempotencyStore` (reserva, expiração, cotas) e `IdempotencyMiddleware` (repetição, concorrência, escopo, limites) |
+| `IdempotencyTests.cs` | `InMemoryIdempotencyStore` (reserva, expiração, cotas, orçamento de bytes, despejo sem tocar em outros escopos) e `IdempotencyMiddleware` (repetição, concorrência, escopo, limites, cancelamento antes e depois do commit, store que falha ao guardar) |
 | `HardeningTests.cs` | Commands internos em paralelo, ciclo de `PublishAfterCommit`, transação aberta fora do pipeline, behaviors antes/depois do `AddTecCqrs`, regras assíncronas, `IPrincipalAccessor` × `AddAspNetCore` |
 | `RobustnessTests.cs` | `[SkipTransaction]` aninhado, transação perdida, registros keyed, authorizers genéricos abertos, handler `Singleton`, `ISender` do provider raiz |
 | `RegressionTests.cs` | Erros sem duplicidade, handlers de interface, opções congeladas, um log por exceção, cancelamento, tipos que não carregam |
+| `CqrsIssueRegressionTests.cs` | Regressões de issues: falha de behavior próprio depois do commit não descarta as notificações pós-commit, authorizer de interface base (pelo `AddRequestAuthorizer`, recusado se registrado direto no container depois do `AddTecCqrs`), autenticação conferida antes de criar authorizers e profundidade máxima de requisições aninhadas |
 | `ObservabilityTests.cs` | `Activity`, métricas, nomes `TEC.Cqrs` com o prefixo assinado pelo TEC.Observability |
-| `HttpResultTests.cs` | `ToHttpResult`, `ToCreatedHttpResult`, `Location`, paginação |
-| `ExceptionHandlerMiddlewareTests.cs` | Middleware de exceções do .NET 8 |
+| `HttpResultTests.cs` | `ToHttpResult`, `ToCreatedHttpResult`, `ToNoContentHttpResult` (status igual ao escrito), `Location`, paginação, ETag |
 | `PackageSplitTests.cs` | Registro explícito (caminho AOT), satélites, `JsonTypeInfoResolver` |
 
 ### Carga, performance e segurança sob carga
@@ -136,7 +133,7 @@ resumo da execução. Sem a variável, as seções vão só para a saída do tes
 
 | Workflow | Testes |
 |---|---|
-| `ci.yml` (PR, push na `main`, semanal) | `TEC.Cqrs.Tests` inteiro em `net10.0` (com cobertura), `net8.0` e `net10.0` sem ICU |
+| `ci.yml` (PR, push na `main`, semanal) | `TEC.Cqrs.Tests` inteiro em `net10.0` (com cobertura) e `net10.0` sem ICU; job `Native AOT` com o `samples/TEC.Cqrs.AotSample` |
 | `release.yml` | O mesmo (portão da publicação), sem carga |
 | `performance.yml` (só manual) | Input `suite`: `pesadas` (padrão, `Carga-Pesada` com o fator escolhido), `rapida` (`Carga-CI`) ou `todas` |
 

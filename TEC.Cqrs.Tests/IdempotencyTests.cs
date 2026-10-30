@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using TEC.Core.Common.Results;
+using TEC.Cqrs.Abstractions;
 using TEC.Cqrs.AspNetCore;
 using TEC.Cqrs.AspNetCore.Idempotency;
 using TEC.Cqrs.DependencyInjection;
@@ -215,6 +216,149 @@ public class InMemoryIdempotencyStoreTests
     {
         await Assert.That(() => new IdempotencyKey("u", key)).ThrowsExactly<ArgumentException>();
     }
+
+    private static IdempotencyRequest RequestFor(string scope, string key) =>
+        new(new IdempotencyKey(scope, key), "h", TimeSpan.FromHours(1), TimeSpan.FromMinutes(1));
+
+    private static IdempotentResponse ResponseOfSize(int bodyBytes) =>
+        new(201, null, new Dictionary<string, string>(), new byte[bodyBytes]);
+
+    private static async Task<bool> CompleteWithAsync(InMemoryIdempotencyStore store, string scope, string key, IdempotentResponse response)
+    {
+        var begin = await store.TryBeginAsync(RequestFor(scope, key), CancellationToken.None);
+        return await store.CompleteAsync(new IdempotencyKey(scope, key), begin.LockId, response, CancellationToken.None);
+    }
+
+    [Test]
+    public async Task Global_entry_limit_never_evicts_valid_responses_of_other_scopes()
+    {
+        // Antes, no limite total, a resposta válida de outro usuário era descartada e a repetição dele executava de novo
+        var store = new InMemoryIdempotencyStore(new InMemoryIdempotencyStoreOptions { MaxEntries = 2, MaxEntriesPerScope = 10 });
+        await CompleteAsync(store, "vitima", "v1");
+        await CompleteAsync(store, "atacante", "a1");
+
+        // O atacante abre espaço com a própria resposta (a1), nunca com a da vítima
+        await Assert.That((await BeginAsync(store, "atacante", "a2")).Status).IsEqualTo(IdempotencyBeginStatus.Started);
+
+        // Um terceiro escopo sem nada próprio para descartar é recusado (fail closed), sem tocar em v1
+        await Assert.That(async () => await BeginAsync(store, "outro", "o1")).ThrowsExactly<InvalidOperationException>();
+        await Assert.That((await BeginAsync(store, "vitima", "v1")).Status).IsEqualTo(IdempotencyBeginStatus.Completed);
+        await Assert.That(store.Count).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task Global_entry_limit_purges_expired_entries_of_any_scope()
+    {
+        var clock = new ManualClock(DateTimeOffset.UnixEpoch);
+        var store = new InMemoryIdempotencyStore(new InMemoryIdempotencyStoreOptions { MaxEntries = 1 }, clock);
+        await CompleteAsync(store, "vitima", "v1");
+
+        clock.Advance(TimeSpan.FromHours(2));
+
+        await Assert.That((await BeginAsync(store, "outro", "o1")).Status).IsEqualTo(IdempotencyBeginStatus.Started);
+        await Assert.That(store.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task Byte_budget_is_accounted_on_complete_and_released_on_removal()
+    {
+        var clock = new ManualClock(DateTimeOffset.UnixEpoch);
+        var store = new InMemoryIdempotencyStore(timeProvider: clock);
+        var response = Response("corpo");
+        long expected = InMemoryIdempotencyStore.EstimateSize(response);
+
+        var begin = await store.TryBeginAsync(Request(), CancellationToken.None);
+        await Assert.That(store.TotalBytes).IsEqualTo(0L);
+        await store.CompleteAsync(Key, begin.LockId, response, CancellationToken.None);
+        await Assert.That(store.TotalBytes).IsEqualTo(expected);
+        await Assert.That(expected).IsGreaterThan(5L);
+
+        // Expirada e substituída por outra execução: os bytes saem da conta
+        clock.Advance(TimeSpan.FromHours(2));
+        await store.TryBeginAsync(Request("H2"), CancellationToken.None);
+        await Assert.That(store.TotalBytes).IsEqualTo(0L);
+    }
+
+    [Test]
+    public async Task Byte_budget_evicts_only_the_requester_scope_and_refuses_otherwise()
+    {
+        long size = InMemoryIdempotencyStore.EstimateSize(ResponseOfSize(100));
+        var store = new InMemoryIdempotencyStore(new InMemoryIdempotencyStoreOptions { MaxTotalBytes = (2 * size) + (size / 2) });
+        await Assert.That(await CompleteWithAsync(store, "vitima", "v1", ResponseOfSize(100))).IsTrue();
+        await Assert.That(await CompleteWithAsync(store, "atacante", "a1", ResponseOfSize(100))).IsTrue();
+
+        // O atacante não cabe: descarta a própria resposta mais antiga (a1), não a da vítima
+        await Assert.That(await CompleteWithAsync(store, "atacante", "a2", ResponseOfSize(100))).IsTrue();
+        await Assert.That((await BeginAsync(store, "vitima", "v1")).Status).IsEqualTo(IdempotencyBeginStatus.Completed);
+        await Assert.That((await BeginAsync(store, "atacante", "a2")).Status).IsEqualTo(IdempotencyBeginStatus.Completed);
+
+        // Escopo sem respostas próprias: a reserva é aceita (ainda há bytes livres), mas a resposta não cabe sem descartar
+        // as dos outros, então é recusada e a reserva fica em andamento
+        var begin = await store.TryBeginAsync(RequestFor("outro", "o1"), CancellationToken.None);
+        await Assert.That(async () => await store.CompleteAsync(new IdempotencyKey("outro", "o1"), begin.LockId, ResponseOfSize(100),
+            CancellationToken.None)).ThrowsExactly<InvalidOperationException>();
+        await Assert.That((await BeginAsync(store, "outro", "o1")).Status).IsEqualTo(IdempotencyBeginStatus.InProgress);
+        await Assert.That((await BeginAsync(store, "vitima", "v1")).Status).IsEqualTo(IdempotencyBeginStatus.Completed);
+        await Assert.That(store.TotalBytes).IsLessThanOrEqualTo((2 * size) + (size / 2));
+    }
+
+    [Test]
+    public async Task Exhausted_byte_budget_refuses_new_reservations_before_execution()
+    {
+        long size = InMemoryIdempotencyStore.EstimateSize(ResponseOfSize(64));
+        var store = new InMemoryIdempotencyStore(new InMemoryIdempotencyStoreOptions { MaxTotalBytes = size });
+        await Assert.That(await CompleteWithAsync(store, "vitima", "v1", ResponseOfSize(64))).IsTrue();
+
+        var ex = await Assert.That(async () => await BeginAsync(store, "outro", "o1")).ThrowsExactly<InvalidOperationException>();
+        await Assert.That(ex!.Message).Contains("MaxTotalBytes");
+        await Assert.That((await BeginAsync(store, "vitima", "v1")).Status).IsEqualTo(IdempotencyBeginStatus.Completed);
+    }
+
+    [Test]
+    public async Task Response_larger_than_the_byte_budget_is_refused_and_the_reservation_stays_in_progress()
+    {
+        var store = new InMemoryIdempotencyStore(new InMemoryIdempotencyStoreOptions { MaxTotalBytes = 10 });
+        var begin = await store.TryBeginAsync(Request(), CancellationToken.None);
+
+        await Assert.That(async () => await store.CompleteAsync(Key, begin.LockId, ResponseOfSize(100), CancellationToken.None))
+            .ThrowsExactly<InvalidOperationException>();
+        await Assert.That(store.TotalBytes).IsEqualTo(0L);
+        await Assert.That((await store.TryBeginAsync(Request(), CancellationToken.None)).Status).IsEqualTo(IdempotencyBeginStatus.InProgress);
+    }
+
+    [Test]
+    [Arguments(0L)]
+    [Arguments(-1L)]
+    public async Task Invalid_byte_budget_is_rejected_at_startup(long maxTotalBytes)
+    {
+        await Assert.That(() => new InMemoryIdempotencyStore(new InMemoryIdempotencyStoreOptions { MaxTotalBytes = maxTotalBytes }))
+            .Throws<ArgumentOutOfRangeException>();
+        await Assert.That(() => new ServiceCollection().AddInMemoryIdempotencyStore(o => o.MaxTotalBytes = maxTotalBytes))
+            .Throws<ArgumentOutOfRangeException>();
+    }
+
+    [Test]
+    public async Task Concurrent_completions_never_exceed_the_byte_budget()
+    {
+        long size = InMemoryIdempotencyStore.EstimateSize(ResponseOfSize(256));
+        long budget = size * 10;
+        var store = new InMemoryIdempotencyStore(new InMemoryIdempotencyStoreOptions { MaxTotalBytes = budget, MaxEntries = 100_000 });
+
+        await Task.WhenAll(Enumerable.Range(0, 400).Select(i => Task.Run(async () =>
+        {
+            try
+            {
+                await CompleteWithAsync(store, $"u{i % 8}", $"k{i}", ResponseOfSize(256));
+            }
+            catch (InvalidOperationException)
+            {
+                // Recusa sem espaço é o comportamento esperado sob pressão
+            }
+        })));
+
+        await Assert.That(store.TotalBytes).IsLessThanOrEqualTo(budget);
+        await Assert.That(store.TotalBytes % size).IsEqualTo(0L);
+    }
 }
 
 public class IdempotencyMiddlewareTests
@@ -227,7 +371,8 @@ public class IdempotencyMiddlewareTests
         public string Body = """{"id":1}""";
     }
 
-    private static (RequestDelegate Pipeline, ServiceProvider Provider) Build(Endpoint endpoint, Action<IdempotencyOptions>? configure = null)
+    private static (RequestDelegate Pipeline, ServiceProvider Provider) Build(Endpoint endpoint, Action<IdempotencyOptions>? configure = null,
+        Action<IServiceCollection>? extra = null)
     {
         var services = new ServiceCollection();
         services.AddLogging();
@@ -235,6 +380,7 @@ public class IdempotencyMiddlewareTests
         services.AddTecCqrs(o => o.RegisterServicesFromAssemblyContaining<CallLog>())
             .AddAspNetCore()
             .AddIdempotency(configure);
+        extra?.Invoke(services);
         services.AddInMemoryIdempotencyStore();
         var provider = services.BuildServiceProvider();
 
@@ -256,7 +402,8 @@ public class IdempotencyMiddlewareTests
     }
 
     /// <summary>Pipeline com o middleware e um endpoint próprio.</summary>
-    private static (RequestDelegate Pipeline, ServiceProvider Provider) Build(RequestDelegate endpoint, Action<IdempotencyOptions>? configure = null)
+    private static (RequestDelegate Pipeline, ServiceProvider Provider) Build(RequestDelegate endpoint, Action<IdempotencyOptions>? configure = null,
+        Action<IServiceCollection>? extra = null)
     {
         var services = new ServiceCollection();
         services.AddLogging();
@@ -264,6 +411,7 @@ public class IdempotencyMiddlewareTests
         services.AddTecCqrs(o => o.RegisterServicesFromAssemblyContaining<CallLog>())
             .AddAspNetCore()
             .AddIdempotency(configure);
+        extra?.Invoke(services);
         services.AddInMemoryIdempotencyStore();
         var provider = services.BuildServiceProvider();
 
@@ -461,20 +609,107 @@ public class IdempotencyMiddlewareTests
         await Assert.That(retry.Response.Headers.Location.ToString()).IsEqualTo("/pedidos/42");
     }
 
-    [Test]
-    public async Task Cancellation_by_the_client_after_success_status_keeps_the_reservation()
+    /// <summary>Simula a desconexão do cliente: cancela o <c>RequestAborted</c> e interrompe o endpoint.</summary>
+    private static async Task AbortAsync(HttpContext context)
     {
-        // A-01: endpoint próprio que escreve com o RequestAborted e é interrompido pela desconexão depois de definir 2xx: a
-        // operação pode ter sido confirmada, então a reserva é mantida (a repetição recebe 409 até o LockTimeout)
+        using var aborted = new CancellationTokenSource();
+        context.RequestAborted = aborted.Token;
+        await aborted.CancelAsync();
+        context.RequestAborted.ThrowIfCancellationRequested();
+    }
+
+    private static void AddUnitOfWork(IServiceCollection services)
+    {
+        services.AddScoped<FakeUnitOfWork>();
+        services.AddScoped<TEC.Cqrs.Persistence.IUnitOfWork>(sp => sp.GetRequiredService<FakeUnitOfWork>());
+    }
+
+    [Test]
+    public async Task Cancellation_before_commit_releases_the_reservation_even_with_success_status()
+    {
+        // O status começa em 200 e o endpoint pode defini-lo antes de executar: sem commit e sem bytes escritos nada foi
+        // efetivado, então a chave é liberada (antes, o status 2xx sozinho prendia a chave até o LockTimeout)
+        var executions = 0;
+        var (pipeline, provider) = Build(async context =>
+        {
+            if (Interlocked.Increment(ref executions) == 1)
+            {
+                context.Response.StatusCode = StatusCodes.Status201Created;
+                await AbortAsync(context);
+            }
+
+            context.Response.StatusCode = StatusCodes.Status201Created;
+            await context.Response.WriteAsync("ok");
+        });
+        await using var _ = provider;
+
+        await Assert.That(async () => await pipeline(Context(provider, "k1"))).Throws<OperationCanceledException>();
+        var retry = Context(provider, "k1");
+        await pipeline(retry);
+
+        await Assert.That(executions).IsEqualTo(2);
+        await Assert.That(retry.Response.StatusCode).IsEqualTo(201);
+        await Assert.That(ResponseBody(retry)).IsEqualTo("ok");
+    }
+
+    [Test]
+    public async Task Cancellation_after_commit_keeps_the_reservation()
+    {
+        // O command foi confirmado pela transação do pipeline e o cliente desconecta antes da resposta: liberar a chave
+        // deixaria a repetição executar a operação de novo
         var executions = 0;
         var (pipeline, provider) = Build(async context =>
         {
             Interlocked.Increment(ref executions);
-            using var aborted = new CancellationTokenSource();
-            context.RequestAborted = aborted.Token;
+            var result = await context.RequestServices.GetRequiredService<ISender>().Send(new IdempotentCommitCommand());
+            if (result.IsSuccess)
+                await AbortAsync(context);
+        }, extra: AddUnitOfWork);
+        await using var _ = provider;
+
+        var first = Context(provider, "k1");
+        await Assert.That(async () => await pipeline(first)).Throws<OperationCanceledException>();
+        var retry = Context(provider, "k1");
+        await pipeline(retry);
+
+        await Assert.That(first.RequestServices.GetRequiredService<CallLog>().Entries).Contains("commit");
+        await Assert.That(executions).IsEqualTo(1);
+        await Assert.That(retry.Response.StatusCode).IsEqualTo(409);
+        await Assert.That(ErrorCode(retry)).IsEqualTo("IDEMPOTENCIA_EM_ANDAMENTO");
+    }
+
+    [Test]
+    public async Task Exception_after_commit_keeps_the_reservation()
+    {
+        var executions = 0;
+        var (pipeline, provider) = Build(async context =>
+        {
+            Interlocked.Increment(ref executions);
+            await context.RequestServices.GetRequiredService<ISender>().Send(new IdempotentCommitCommand());
+            throw new InvalidOperationException("falha depois do commit");
+        }, extra: AddUnitOfWork);
+        await using var _ = provider;
+
+        await Assert.That(async () => await pipeline(Context(provider, "k1"))).ThrowsExactly<InvalidOperationException>();
+        var retry = Context(provider, "k1");
+        await pipeline(retry);
+
+        await Assert.That(executions).IsEqualTo(1);
+        await Assert.That(retry.Response.StatusCode).IsEqualTo(409);
+    }
+
+    [Test]
+    public async Task Cancellation_after_success_body_was_written_keeps_the_reservation()
+    {
+        // Sem transação do pipeline (ex.: endpoint que grava por conta própria): a resposta de sucesso já escrita é o sinal
+        // de que a operação foi executada
+        var executions = 0;
+        var (pipeline, provider) = Build(async context =>
+        {
+            Interlocked.Increment(ref executions);
             context.Response.StatusCode = StatusCodes.Status201Created;
-            await aborted.CancelAsync();
-            context.RequestAborted.ThrowIfCancellationRequested();
+            await context.Response.WriteAsync("""{"id":7}""");
+            await AbortAsync(context);
         });
         await using var _ = provider;
 
@@ -484,7 +719,122 @@ public class IdempotencyMiddlewareTests
 
         await Assert.That(executions).IsEqualTo(1);
         await Assert.That(retry.Response.StatusCode).IsEqualTo(409);
-        await Assert.That(ErrorCode(retry)).IsEqualTo("IDEMPOTENCIA_EM_ANDAMENTO");
+    }
+
+    [Test]
+    public async Task Cancellation_after_error_body_was_written_releases_the_reservation()
+    {
+        var executions = 0;
+        var (pipeline, provider) = Build(async context =>
+        {
+            if (Interlocked.Increment(ref executions) == 1)
+            {
+                context.Response.StatusCode = StatusCodes.Status400BadRequest;
+                await context.Response.WriteAsync("""{"erro":true}""");
+                await AbortAsync(context);
+            }
+
+            context.Response.StatusCode = StatusCodes.Status201Created;
+            await context.Response.WriteAsync("ok");
+        });
+        await using var _ = provider;
+
+        await Assert.That(async () => await pipeline(Context(provider, "k1"))).Throws<OperationCanceledException>();
+        var retry = Context(provider, "k1");
+        await pipeline(retry);
+
+        await Assert.That(executions).IsEqualTo(2);
+        await Assert.That(retry.Response.StatusCode).IsEqualTo(201);
+    }
+
+    /// <summary>Store que falha ao guardar a resposta nas primeiras <paramref name="failures"/> chamadas.</summary>
+    private sealed class FlakyCompleteStore(int failures) : IIdempotencyStore
+    {
+        private readonly InMemoryIdempotencyStore _inner = new();
+        private int _remaining = failures;
+        private int _completeCalls;
+
+        public int CompleteCalls => Volatile.Read(ref _completeCalls);
+
+        public ValueTask<IdempotencyBeginResult> TryBeginAsync(IdempotencyRequest request, CancellationToken cancellationToken) =>
+            _inner.TryBeginAsync(request, cancellationToken);
+
+        public ValueTask<bool> CompleteAsync(IdempotencyKey key, Guid lockId, IdempotentResponse response, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref _completeCalls);
+            if (Interlocked.Decrement(ref _remaining) >= 0)
+                throw new TimeoutException("banco indisponível: senha=segredo-do-banco");
+            return _inner.CompleteAsync(key, lockId, response, cancellationToken);
+        }
+
+        public ValueTask<bool> AbandonAsync(IdempotencyKey key, Guid lockId, CancellationToken cancellationToken) =>
+            _inner.AbandonAsync(key, lockId, cancellationToken);
+    }
+
+    [Test]
+    public async Task Complete_failing_transiently_is_retried_and_the_response_is_stored()
+    {
+        var store = new FlakyCompleteStore(failures: 2);
+        var logs = new ListLoggerProvider();
+        var endpoint = new Endpoint();
+        var (pipeline, provider) = Build(endpoint, extra: s =>
+        {
+            s.AddSingleton<IIdempotencyStore>(store);
+            s.AddSingleton<Microsoft.Extensions.Logging.ILoggerProvider>(logs);
+        });
+        await using var _ = provider;
+
+        var first = Context(provider, "k1");
+        await pipeline(first);
+        var retry = Context(provider, "k1");
+        await pipeline(retry);
+
+        await Assert.That(store.CompleteCalls).IsEqualTo(3);
+        await Assert.That(first.Response.StatusCode).IsEqualTo(201);
+        await Assert.That(endpoint.Executions).IsEqualTo(1);
+        await Assert.That(retry.Response.Headers["Idempotent-Replayed"].ToString()).IsEqualTo("true");
+        await Assert.That(logs.Entries.Count(e => e.EventId.Id == 1026)).IsEqualTo(2);
+        await Assert.That(logs.Entries.Any(e => e.EventId.Id == 1027)).IsFalse();
+    }
+
+    [Test]
+    public async Task Complete_failing_on_every_attempt_still_sends_the_response_and_keeps_the_reservation()
+    {
+        // A operação já foi executada: o cliente recebe a resposta, a chave fica reservada (409 na repetição, sem executar
+        // de novo) e o erro é registrado sem a chave, o corpo ou a mensagem da exceção do store
+        var store = new FlakyCompleteStore(failures: int.MaxValue);
+        var logs = new ListLoggerProvider();
+        var endpoint = new Endpoint();
+        var (pipeline, provider) = Build(endpoint, extra: s =>
+        {
+            s.AddSingleton<IIdempotencyStore>(store);
+            s.AddSingleton<Microsoft.Extensions.Logging.ILoggerProvider>(logs);
+        });
+        await using var _ = provider;
+
+        var first = Context(provider, "chave-secreta-1");
+        await pipeline(first);
+        var retry = Context(provider, "chave-secreta-1");
+        await pipeline(retry);
+
+        // Limitado: a primeira tentativa mais uma por espera (3 no total), sem insistir indefinidamente
+        await Assert.That(store.CompleteCalls).IsEqualTo(IdempotencyMiddleware.CompleteRetryDelays.Length + 1);
+        await Assert.That(store.CompleteCalls).IsEqualTo(3);
+        await Assert.That(first.Response.StatusCode).IsEqualTo(201);
+        await Assert.That(ResponseBody(first)).IsEqualTo("""{"id":1}""");
+        await Assert.That(endpoint.Executions).IsEqualTo(1);
+        await Assert.That(retry.Response.StatusCode).IsEqualTo(409);
+
+        var error = logs.Entries.Single(e => e.EventId.Id == 1027);
+        await Assert.That(error.Level).IsEqualTo(Microsoft.Extensions.Logging.LogLevel.Error);
+        await Assert.That(error.Exception).IsNull();
+        await Assert.That(error.Message).Contains(typeof(TimeoutException).FullName!);
+        foreach (var entry in logs.Entries)
+        {
+            await Assert.That(entry.Message).DoesNotContain("segredo");
+            await Assert.That(entry.Message).DoesNotContain("chave-secreta-1");
+            await Assert.That(entry.Message).DoesNotContain("\"id\"");
+        }
     }
 
     [Test]
@@ -772,4 +1122,13 @@ public class IdempotencyMiddlewareTests
 
         await Assert.That(() => builder.AddIdempotency()).ThrowsExactly<InvalidOperationException>();
     }
+}
+
+/// <summary>Command confirmado pela transação do pipeline (com o FakeUnitOfWork), para os testes de cancelamento após o commit.</summary>
+[TEC.Cqrs.Authorization.AllowAnonymousRequest, TEC.Cqrs.Validation.SkipValidation]
+public sealed record IdempotentCommitCommand : ICommand;
+
+internal sealed class IdempotentCommitHandler : ICommandHandler<IdempotentCommitCommand>
+{
+    public Task<Result> Handle(IdempotentCommitCommand command, CancellationToken cancellationToken) => Task.FromResult(Result.Success());
 }

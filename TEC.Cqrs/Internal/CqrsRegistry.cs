@@ -1,8 +1,8 @@
 using System.Collections.Concurrent;
 using System.Collections.Frozen;
-using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using Microsoft.Extensions.DependencyInjection;
 using TEC.Core.Common.Results;
 using TEC.Cqrs.Abstractions;
 using TEC.Cqrs.DependencyInjection;
@@ -11,7 +11,8 @@ namespace TEC.Cqrs.Internal;
 
 /// <summary>
 /// O que o <c>AddTecCqrs</c> registrou, em forma utilizável em execução sem reflexão (Singleton): o executor de cada
-/// requisição e os tipos (concretos, base e interfaces) que têm notification handlers ou authorizers.
+/// requisição, os tipos (concretos, base e interfaces) que têm notification handlers ou authorizers e, por requisição
+/// conhecida, os authorizers que se aplicam a ela (calculados no registro).
 /// </summary>
 internal sealed class CqrsRegistry
 {
@@ -19,17 +20,36 @@ internal sealed class CqrsRegistry
     private readonly FrozenDictionary<(Type Request, Type Response), RequestHandlerWrapper> _handlers;
     private readonly NotificationTarget[] _notificationTargets;
     private readonly AuthorizerTarget[] _authorizerTargets;
+    private readonly FrozenDictionary<Type, AuthorizerTarget[]> _authorizersByRequest;
     private readonly ConcurrentDictionary<(Type Request, Type Response), RequestHandlerWrapper> _dynamicHandlers = new();
     private readonly ConcurrentDictionary<(Type Concrete, Type Static), NotificationTarget[]> _notificationCache = new();
     private readonly ConcurrentDictionary<Type, AuthorizerTarget[]> _authorizerCache = new();
+    private readonly CqrsOptions _options;
+    private readonly Lock _lateCheckLock = new();
 
-    public CqrsRegistry(CqrsOptions options)
+    // Container do AddTecCqrs, guardado até a verificação tardia dos authorizers (EnsureLateAuthorizersAreApplied)
+    private IServiceCollection? _pendingServices;
+    private string? _lateAuthorizerError;
+
+    /// <param name="options">Opções do <c>AddTecCqrs</c>, já configuradas.</param>
+    /// <param name="services">
+    /// Container do <c>AddTecCqrs</c>, para a verificação tardia dos authorizers; <c>null</c> dispensa a verificação.
+    /// </param>
+    public CqrsRegistry(CqrsOptions options, IServiceCollection? services = null)
     {
+        _options = options;
+        _pendingServices = services;
         _handlers = options.Handlers
             .GroupBy(h => (h.RequestType, h.ResponseType))
             .ToFrozenDictionary(g => g.Key, g => g.First().Wrapper);
         _notificationTargets = [.. options.NotificationHandlers.Select(n => n.Target).DistinctBy(t => t.TargetType)];
         _authorizerTargets = [.. options.Authorizers.Select(a => a.Target).DistinctBy(t => t.TargetType)];
+
+        // Pré-cálculo no registro: para cada requisição conhecida, os alvos registrados de tipo base ou interface que ela
+        // implementa, já na ordem de execução (sem GetInterfaces/MakeGenericType em execução)
+        _authorizersByRequest = ServiceCollectionExtensions.GetKnownRequests(options)
+            .Distinct()
+            .ToFrozenDictionary(request => request, request => TargetOrder.Sort(_authorizerTargets, t => t.TargetType, request));
     }
 
     /// <summary>
@@ -43,13 +63,6 @@ internal sealed class CqrsRegistry
         if (_handlers.TryGetValue((requestType, typeof(TResponse)), out var wrapper))
             return (RequestHandlerWrapper<TResponse>)wrapper;
 
-        if (!RuntimeFeature.IsDynamicCodeSupported)
-        {
-            throw new InvalidOperationException(
-                $"Nenhum handler registrado para '{requestType.FullName}'. Em Native AOT, registre o handler pelo AddTecCqrs " +
-                "(AddCommandHandler/AddQueryHandler).");
-        }
-
         return (RequestHandlerWrapper<TResponse>)_dynamicHandlers.GetOrAdd((requestType, typeof(TResponse)), CreateDynamicHandler);
     }
 
@@ -62,51 +75,77 @@ internal sealed class CqrsRegistry
             static (key, state) => TargetOrder.Sort(state.Targets.Append(state.Static), t => t.TargetType, key.Concrete),
             (Targets: _notificationTargets, Static: staticTarget));
 
-    /// <summary>Authorizers aplicáveis à requisição (tipo exato, classes base e interfaces), na ordem de execução.</summary>
+    /// <summary>
+    /// Authorizers aplicáveis à requisição (tipo exato, classes base e interfaces), na ordem de execução: os alvos
+    /// registrados pelo <c>AddTecCqrs</c> que a requisição implementa (pré-calculados no registro para as requisições
+    /// conhecidas) mais o tipo exato, que cobre authorizers do tipo exato registrados direto no container.
+    /// </summary>
+    /// <remarks>
+    /// Sem reflexão e sem criar tipos genéricos em execução (compatível com Native AOT). Authorizer de tipo base ou
+    /// interface registrado direto no container, fora do <c>AddTecCqrs</c>, nunca entra aqui: na primeira chamada,
+    /// <see cref="EnsureLateAuthorizersAreApplied"/> derruba a execução com <see cref="InvalidOperationException"/> (fail
+    /// closed) em vez de rodar a requisição sem ele.
+    /// </remarks>
     public AuthorizerTarget[] GetAuthorizerTargets<TRequest>()
-        where TRequest : IBaseRequest =>
-        _authorizerCache.GetOrAdd(typeof(TRequest),
-            static (requestType, targets) => TargetOrder.Sort(GetAllAuthorizerTargets<TRequest>(targets), t => t.TargetType, requestType),
-            _authorizerTargets);
-
-    private static readonly ConcurrentDictionary<Type, AuthorizerTarget> DynamicAuthorizerTargets = new();
-
-    [UnconditionalSuppressMessage("AOT", "IL2090",
-        Justification = "Necessário para descobrir interfaces de IBaseRequest da requisição.")]
-    private static IEnumerable<AuthorizerTarget> GetAllAuthorizerTargets<TRequest>(AuthorizerTarget[] registered)
         where TRequest : IBaseRequest
     {
-        var list = new List<AuthorizerTarget>(registered.Length + 4);
-        list.AddRange(registered);
-        list.Add(AuthorizerTarget<TRequest>.Instance);
+        if (_authorizerCache.TryGetValue(typeof(TRequest), out var cached))
+            return cached;
 
-        var requestType = typeof(TRequest);
-        var current = requestType.BaseType;
-        while (current != null && current != typeof(object))
-        {
-            if (typeof(IBaseRequest).IsAssignableFrom(current))
-                list.Add(GetOrCreateAuthorizerTarget(current));
-            current = current.BaseType;
-        }
+        EnsureLateAuthorizersAreApplied();
+        var registered = _authorizersByRequest.TryGetValue(typeof(TRequest), out var known)
+            ? known
+            : TargetOrder.Sort(_authorizerTargets, t => t.TargetType, typeof(TRequest));
 
-        foreach (var iface in requestType.GetInterfaces())
-        {
-            if (typeof(IBaseRequest).IsAssignableFrom(iface))
-                list.Add(GetOrCreateAuthorizerTarget(iface));
-        }
-
-        return list;
+        // O tipo exato fica sempre primeiro (TargetOrder); DistinctBy mantém um único alvo por tipo
+        return _authorizerCache.GetOrAdd(typeof(TRequest),
+            TargetOrder.Sort(registered.Prepend(AuthorizerTarget<TRequest>.Instance), t => t.TargetType, typeof(TRequest)));
     }
 
-    [UnconditionalSuppressMessage("AOT", "IL3050:RequiresDynamicCode",
-        Justification = "Chamado para instanciar AuthorizerTarget de interfaces ou classes base da requisição.")]
-    private static AuthorizerTarget GetOrCreateAuthorizerTarget(Type type) =>
-        DynamicAuthorizerTargets.GetOrAdd(type, static t => (AuthorizerTarget)Activator.CreateInstance(typeof(AuthorizerTarget<>).MakeGenericType(t))!);
+    /// <summary>
+    /// Repete, uma vez e sobre o container completo, a verificação de authorizers do <c>AddTecCqrs</c>: um
+    /// <c>IRequestAuthorizer</c> de tipo base ou interface registrado direto no container depois do <c>AddTecCqrs</c>
+    /// contaria como autorização declarada, mas nunca seria executado. Chamado na primeira autorização e na subida do
+    /// host (<c>.AddAspNetCore()</c>). Depois de falhar, continua falhando com a mesma mensagem.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Authorizer que o pipeline nunca executaria.</exception>
+    public void EnsureLateAuthorizersAreApplied()
+    {
+        if (Volatile.Read(ref _pendingServices) is not null)
+        {
+            lock (_lateCheckLock)
+            {
+                if (_pendingServices is { } services)
+                {
+                    try
+                    {
+                        ServiceCollectionExtensions.EnsureAuthorizersAreApplied(services, _options);
+                    }
+                    catch (InvalidOperationException ex)
+                    {
+                        _lateAuthorizerError = ex.Message;
+                    }
 
-    [UnconditionalSuppressMessage("AOT", "IL3050:RequiresDynamicCode",
-        Justification = "Chamado apenas quando RuntimeFeature.IsDynamicCodeSupported é true (verificado em GetHandler).")]
+                    // Solta a referência ao container só depois de gravar o resultado
+                    Volatile.Write(ref _pendingServices, null);
+                }
+            }
+        }
+
+        if (_lateAuthorizerError is { } error)
+            throw new InvalidOperationException(error);
+    }
+
     private static RequestHandlerWrapper CreateDynamicHandler((Type Request, Type Response) key)
     {
+        // A verificação fica aqui, antes de qualquer reflexão: o analisador de AOT a reconhece (sem supressão de IL3050)
+        if (!RuntimeFeature.IsDynamicCodeSupported)
+        {
+            throw new InvalidOperationException(
+                $"Nenhum handler registrado para '{key.Request.FullName}'. Em Native AOT, registre o handler pelo AddTecCqrs " +
+                "(AddCommandHandler/AddQueryHandler).");
+        }
+
         // Handler registrado direto no container: a requisição não passou pela validação do registro (AddTecCqrs)
         RequestMetadata.EnsureValid(key.Request);
 

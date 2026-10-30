@@ -40,7 +40,15 @@ flowchart LR
 
 Os três pacotes têm `IsAotCompatible` e são compilados com os avisos de trimming/AOT (IL2xxx/IL3xxx) como erro. Os
 executores de cada requisição, as fábricas de `Result` e a entrega a handlers/authorizers de tipo base ou interface são
-montados **no registro**: em execução não há `MakeGenericType`, `Activator` nem reflexão por chamada.
+montados **no registro**: o despacho de cada `Send` não usa `MakeGenericType`, `Activator` nem reflexão por chamada. Os
+authorizers de classes base e interfaces que valem para cada requisição conhecida também são calculados no `AddTecCqrs`;
+o núcleo não tem supressão de IL2090/IL3050 para isso.
+
+Além dos analisadores, o job `Native AOT` do CI publica o `samples/TEC.Cqrs.AotSample` com `PublishAot` (qualquer aviso
+de trimming/AOT quebra o publish) e executa o binário nativo, que confere despacho, autorização por interface, validação,
+transação, notificação pós-commit e o JSON gerado em compilação. O sample não usa o FluentValidation: a biblioteca de
+terceiros não é anotada para trimming, então o `TEC.Cqrs.FluentValidation` fica coberto só pelos analisadores do
+próprio pacote.
 
 | API | Usa reflexão | Em AOT |
 |---|:---:|:---:|
@@ -136,6 +144,7 @@ Para os corpos de requisição das Minimal APIs, registre o contexto também no 
 | `InvalidOperationException` "Nenhum handler registrado para '...'. Em Native AOT, registre o handler pelo AddTecCqrs (AddCommandHandler/AddQueryHandler)." | Handler registrado direto no container | Registre pelo `AddTecCqrs` |
 | `InvalidOperationException` "A resposta '...' não foi registrada. Em Native AOT..." | Idem | Idem |
 | `InvalidOperationException` "Sem metadados JSON para '...'" | Envelope fora do contexto JSON | `[JsonSerializable(typeof(...))]` no `AppJsonContext` |
+| `InvalidOperationException` "O authorizer '...' de '...' foi registrado direto no container" | Authorizer de tipo base ou interface registrado direto no container (antes ou depois do `AddTecCqrs`) | Use `AddRequestAuthorizer` |
 
 ---
 
@@ -161,7 +170,9 @@ AOT. Use `class`/`record`.
 <summary>Handlers registrados direto no container funcionam?</summary>
 
 Em JIT, sim (o executor é criado por reflexão na primeira chamada). Em AOT, não: registre pelo `AddTecCqrs`. Authorizers e
-notification handlers de tipo base ou interface só são encontrados pelo `AddTecCqrs`, em JIT e em AOT.
+notification handlers de tipo base ou interface só são encontrados pelo `AddTecCqrs`, em JIT e em AOT. Um authorizer de
+tipo base ou interface registrado direto no container é recusado: antes do `AddTecCqrs`, na própria chamada; depois,
+na subida do host (com `.AddAspNetCore()`) ou no primeiro `Send`.
 
 </details>
 

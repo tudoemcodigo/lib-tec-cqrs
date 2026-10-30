@@ -124,12 +124,14 @@ Todos com `LoggerMessage` gerado em compilação:
 | 1009 | Error | Falha ao criar os handlers de notificação publicada após o commit |
 | 1010 | Warning | `Transação de {RequestName} desfeita: um command interno falhou.` |
 | 1011 | Warning | `Location` descartado (categoria `TEC.Cqrs.AspNetCore.ResultHttpExtensions`) |
-| 1012–1015 | Error/Debug/Warning | Tratamento de exceções no .NET 8 (categoria `TEC.Cqrs.AspNetCore.ExceptionHandler`) |
+| 1012–1015 | — | Reservados, sem uso (eram do middleware de exceções do .NET 8, removido antes da primeira publicação); não são reaproveitados |
 | 1016 | Error | Publicação pós-commit interrompida após 10 rodadas |
 | 1017–1022 | Debug/Information/Warning | Idempotência HTTP: resposta repetida, chave em andamento (409), conteúdo diferente (422), resposta grande demais, reserva perdida, requisição anônima (categoria `TEC.Cqrs.AspNetCore.Idempotency.IdempotencyMiddleware`) |
-| 1023 | Warning | Idempotência: cliente desconectou e o endpoint foi interrompido depois de status 2xx; reserva mantida até o `LockTimeout` |
+| 1023 | Warning | Idempotência: cliente desconectou depois de a operação ter efeito (transação confirmada ou resposta 2xx já escrita); reserva mantida até o `LockTimeout` |
 | 1024 | Warning | Idempotência: usuário autenticado sem nenhum dos `UserIdClaimTypes` (chave ignorada; revise a configuração) |
 | 1025 | Error | Idempotência: endpoint com `keyRequired` e usuário autenticado sem claim de id (HTTP 500 `IDEMPOTENCIA_SEM_ESCOPO`) |
+| 1026 | Warning | Idempotência: o store falhou ao guardar a resposta; nova tentativa em seguida (`{Attempt}`, `{ExceptionType}`) |
+| 1027 | Error | Idempotência: resposta não guardada depois de 3 tentativas; enviada ao cliente, reserva pendente até o `LockTimeout` (só o tipo da exceção, sem chave, corpo nem mensagem) |
 
 Cada falha gera **um único** registro: a exceção convertida (`AppException` ou mapper) é anexada ao log da falha interna,
 e uma exceção não tratada é registrada só na requisição mais interna em que ocorreu (nem as externas nem o

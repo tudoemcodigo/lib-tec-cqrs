@@ -29,7 +29,7 @@ Implementou-se um modelo de autorização em **três níveis complementares**, o
 ## Consequências
 
 ### Positivas
-- **Imunidade a BFLA/BOLA:** Acesso negado antes de qualquer processamento de dados.
+- **Base para evitar BFLA/BOLA:** a requisição é negada antes da validação e do handler, desde que a regra esteja declarada. Um `IRequestAuthorizer` mal escrito (por exemplo, que libera quando falta o `cliente_id`) continua sendo falha da aplicação.
 - **Portabilidade de Ponto de Entrada:** Comandos protegidos pelo mediator continuam seguros quando invocados por Web APIs, mensageria (RabbitMQ, Kafka) ou Jobs.
 - **Auditoria Transparente:** Falhas de autorização geram resultados 401 (`NAO_AUTENTICADO`) ou 403 (`ACESSO_NEGADO`) padronizados sem exceções.
 

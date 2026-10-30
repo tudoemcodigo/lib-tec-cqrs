@@ -98,11 +98,13 @@ flowchart LR
 | Behavior executado antes da autorização | Behavior registrado antes do `AddTecCqrs` derruba a subida |
 | Handler `Singleton` capturando `DbContext`/usuário de um escopo | Handler registrado à mão com tempo de vida diferente de `Scoped` derruba a subida |
 | Laço infinito de notificações pós-commit (negação de serviço) | Limite de 10 rodadas por requisição |
-| Execução duplicada (pedido ou pagamento) quando o cliente repete após timeout | Idempotência com reserva; resposta guardada antes do envio; reserva mantida se a operação foi interrompida depois de 2xx |
+| Execução duplicada (pedido ou pagamento) quando o cliente repete após timeout | Idempotência com reserva; resposta guardada antes do envio, com novas tentativas se o store falhar; reserva mantida se a operação foi interrompida depois do commit ou da resposta 2xx escrita |
 | Replay da resposta guardada para outro usuário, esquema de autenticação ou tenant | Escopo = hash de tipo, emissor e valor do claim do usuário (só identidades autenticadas) + `ScopeDiscriminator`; `HashedRequestHeaders` |
 | Endpoint com chave obrigatória executado sem proteção | `keyRequired` sem escopo: 401 (anônimo) ou 500 de configuração, sem executar |
-| Um usuário apagando as respostas guardadas dos outros (store em memória) | Cota `MaxEntriesPerScope`; despejo O(n) |
-| Authorizer que não trata o anônimo | `AuthorizersRequireAuthentication` (padrão): 401 antes dos authorizers |
+| Um usuário apagando as respostas guardadas dos outros (store em memória) | Despejo só de expiradas e de respostas do próprio escopo (cota `MaxEntriesPerScope`, limite total e `MaxTotalBytes`); sem espaço, recusa a nova reserva |
+| Esgotamento de memória pelas respostas guardadas (store em memória) | Orçamento global `MaxTotalBytes` (padrão 256 MiB), além dos limites de entradas e de `MaxResponseBodyBytes` |
+| Authorizer que não trata o anônimo | `AuthorizersRequireAuthentication` (padrão): 401 antes de criar os authorizers |
+| Authorizer de interface registrado direto no container, nunca executado (fail-open) | Recusado no `AddTecCqrs`, na subida do host ou no primeiro `Send` |
 | Claim forjado numa identidade não autenticada anexada ao principal | Permissões, papéis e id da idempotência lidos só de identidades autenticadas |
 | *Dependency confusion* | `packageSourceMapping`: `TEC.*` só do feed interno |
 
@@ -118,7 +120,8 @@ RuleFor(c => c.Token).Matches("^[A-Z0-9]{32}$").WithMessage("Token '{PropertyVal
 // ❌ expõe detalhe interno num erro visível ao cliente
 return Error.Conflict("FALHA_BANCO", ex.Message);
 
-// ✅ erro interno: a resposta é genérica e o detalhe fica no log
+// ✅ erro interno: a resposta é genérica; o log do pipeline registra o tipo e o código (FALHA_BANCO), não a mensagem do Error.
+// Para ter o detalhe no log, registre a exceção no próprio handler ou lance-a (o log do pipeline recebe a exceção completa)
 return Error.Failure("FALHA_BANCO", "Falha ao gravar o cliente.");
 ```
 

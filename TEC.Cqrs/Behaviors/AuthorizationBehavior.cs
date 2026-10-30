@@ -13,7 +13,8 @@ namespace TEC.Cqrs.Behaviors;
 /// Autoriza a requisição antes da validação: primeiro os <see cref="AuthorizeRequestAttribute"/> (autenticação, papéis e
 /// policies), depois os <see cref="RequirePermissionAttribute"/> (pelo <see cref="IPermissionChecker"/>) e por fim os
 /// <see cref="IRequestAuthorizer{TRequest}"/> (sem atributo, exigem usuário autenticado:
-/// <see cref="CqrsOptions.AuthorizersRequireAuthentication"/>). Negado, o pipeline retorna falha sem validar nem
+/// <see cref="CqrsOptions.AuthorizersRequireAuthentication"/>, conferido antes de criar qualquer authorizer; com atributos,
+/// os authorizers só são criados depois que os atributos autorizam). Negado, o pipeline retorna falha sem validar nem
 /// chamar o handler, sem revelar regras de validação a quem não tem acesso.
 /// </summary>
 /// <remarks>
@@ -36,9 +37,28 @@ internal sealed class AuthorizationBehavior<TRequest, TResponse>(CqrsOptions opt
     {
         var rules = RequestInfo<TRequest>.AuthorizeRules;
         var permissionRules = RequestInfo<TRequest>.PermissionRules;
-        var authorizers = ResolveAuthorizers();
+        bool hasAttributes = rules.Length > 0 || permissionRules.Length > 0;
+        var targets = registry.GetAuthorizerTargets<TRequest>();
 
-        if (rules.Length == 0 && permissionRules.Length == 0 && authorizers.Length == 0)
+        // Container sem IServiceProviderIsService: só dá para saber se há authorizer resolvendo (comportamento anterior)
+        var authorizers = isService is null ? ResolveAuthorizers(targets) : null;
+
+        if (hasAttributes)
+        {
+            if (await AuthorizeAttributesAsync(request, rules, permissionRules, cancellationToken).ConfigureAwait(false) is { } denied)
+                return ResultFactory<TResponse>.Failure([denied]);
+        }
+        else if (options.AuthorizersRequireAuthentication && !RequestInfo<TRequest>.AllowAnonymous
+                 && (authorizers is not null ? authorizers.Length > 0 : HasRegisteredAuthorizer(targets))
+                 && serviceProvider.GetService<IPrincipalAccessor>()?.Principal?.Identity?.IsAuthenticated != true)
+        {
+            // Só authorizers: o usuário autenticado é exigido antes de criar qualquer authorizer (as dependências deles,
+            // como DbContext ou clientes HTTP, não são instanciadas para o anônimo), sem depender de cada um tratar o anônimo
+            return ResultFactory<TResponse>.Failure([NotAuthenticated]);
+        }
+
+        authorizers ??= ResolveAuthorizers(targets);
+        if (!hasAttributes && authorizers.Length == 0)
         {
             // Fail closed: com RequireAuthorization, toda requisição precisa declarar como é autorizada
             if (options.RequireAuthorization && !RequestInfo<TRequest>.AllowAnonymous)
@@ -49,18 +69,6 @@ internal sealed class AuthorizationBehavior<TRequest, TResponse>(CqrsOptions opt
             }
 
             return await next(cancellationToken).ConfigureAwait(false);
-        }
-
-        if (rules.Length > 0 || permissionRules.Length > 0)
-        {
-            if (await AuthorizeAttributesAsync(request, rules, permissionRules, cancellationToken).ConfigureAwait(false) is { } denied)
-                return ResultFactory<TResponse>.Failure([denied]);
-        }
-        else if (options.AuthorizersRequireAuthentication && !RequestInfo<TRequest>.AllowAnonymous
-                 && serviceProvider.GetService<IPrincipalAccessor>()?.Principal?.Identity?.IsAuthenticated != true)
-        {
-            // Só authorizers: o usuário autenticado é exigido aqui, sem depender de cada authorizer tratar o anônimo
-            return ResultFactory<TResponse>.Failure([NotAuthenticated]);
         }
 
         foreach (var (target, authorizer) in authorizers)
@@ -81,10 +89,10 @@ internal sealed class AuthorizationBehavior<TRequest, TResponse>(CqrsOptions opt
     /// resolvidos os que o container conhece (<see cref="IServiceProviderIsService"/>). A presença de authorizers não fica
     /// em cache por tipo: os registros podem variar entre containers, e um authorizer ignorado seria fail-open.
     /// </remarks>
-    private (AuthorizerTarget Target, object Authorizer)[] ResolveAuthorizers()
+    private (AuthorizerTarget Target, object Authorizer)[] ResolveAuthorizers(AuthorizerTarget[] targets)
     {
         List<(AuthorizerTarget, object)>? resolved = null;
-        foreach (var target in registry.GetAuthorizerTargets<TRequest>())
+        foreach (var target in targets)
         {
             // Sem IServiceProviderIsService (container de terceiros), resolve sempre
             if (isService is not null && !isService.IsService(target.ServiceType))
@@ -98,6 +106,18 @@ internal sealed class AuthorizationBehavior<TRequest, TResponse>(CqrsOptions opt
         }
 
         return resolved is null ? [] : [.. resolved];
+    }
+
+    /// <summary>Há authorizer registrado para algum dos alvos, consultado sem instanciá-lo (requer <c>isService</c>).</summary>
+    private bool HasRegisteredAuthorizer(AuthorizerTarget[] targets)
+    {
+        foreach (var target in targets)
+        {
+            if (isService!.IsService(target.ServiceType))
+                return true;
+        }
+
+        return false;
     }
 
     /// <summary>Retorna o erro de negação, ou <c>null</c> se todas as regras forem atendidas.</summary>

@@ -16,12 +16,4 @@
     <ProjectReference Include="..\TEC.Cqrs\TEC.Cqrs.csproj" />
   </ItemGroup>
 
-  <!--
-    O TEC.Cqrs expõe os internos a este pacote (InternalsVisibleTo), inclusive o polyfill System.Threading.Lock do net8.0
-    (build/Polyfills). Uma segunda cópia compilada aqui conflitaria com a do núcleo (CS0436): este pacote usa a do núcleo.
-  -->
-  <ItemGroup>
-    <Compile Remove="$(TecRepoRoot)build/Polyfills/Lock.cs" />
-  </ItemGroup>
-
 </Project>

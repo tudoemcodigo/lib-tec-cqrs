@@ -35,7 +35,8 @@
 
 > [!NOTE]
 > Documento **histórico**: commit, versões (`0.1.0`, `0.2.0`) e contagens de testes são os do momento de cada revisão. A
-> versão atual do componente é a `0.0.1` (ver [CHANGELOG](../CHANGELOG.md)) e os achados corrigidos já fazem parte dela.
+> versão em desenvolvimento é a `0.0.2` (`Directory.Build.props`; última estável: `0.0.1`, ver [CHANGELOG](../CHANGELOG.md))
+> e os achados corrigidos já fazem parte dela.
 > A pendência do B-04 (collation binária no TEC.ORM) foi resolvida: o `EfIdempotencyStore` do `TEC.ORM.SqlServer` já usa
 > `Latin1_General_100_BIN2` em `Scope` e `IdempotencyKey`.
 

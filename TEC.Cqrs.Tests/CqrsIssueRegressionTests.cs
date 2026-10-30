@@ -1,13 +1,16 @@
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 using TEC.Core.Common.Results;
+using Microsoft.Extensions.Hosting;
 using TEC.Cqrs.Abstractions;
+using TEC.Cqrs.AspNetCore;
 using TEC.Cqrs.Authorization;
 using TEC.Cqrs.Behaviors;
 using TEC.Cqrs.DependencyInjection;
 using TEC.Cqrs.FluentValidation;
 using TEC.Cqrs.Internal;
 using TEC.Cqrs.Persistence;
+using TEC.Cqrs.Tests.Fakes;
 using TEC.Cqrs.Validation;
 
 namespace TEC.Cqrs.Tests;
@@ -91,26 +94,118 @@ public class CqrsIssueRegressionTests
         }
     }
 
-    // Issue #3: Authorizer registrado em interface base é executado
+    // Issue #3: authorizer de interface base. Antes, este teste varria o assembly (que já registra o BaseAuthorizer pelo
+    // AddTecCqrs) e passava pela varredura, não pelo registro direto no container que o nome dizia testar
     [Test]
-    public async Task BaseInterfaceAuthorizer_RegisteredInContainer_IsExecuted()
+    public async Task BaseInterfaceAuthorizer_RegisteredThroughAddTecCqrs_IsExecuted()
+    {
+        // Sem varredura: o único caminho do authorizer é o AddRequestAuthorizer da interface
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddTecCqrs(opt => opt
+            .AddCommandHandler<ConcreteEntityRequest, ConcreteEntityRequestHandler>()
+            .AddRequestAuthorizer<IAuthorizedEntityRequest, BaseAuthorizer>()
+            .AuthorizersRequireAuthentication = false);
+        await using var sp = services.BuildServiceProvider();
+        await using var scope = sp.CreateAsyncScope();
+
+        var result = await scope.ServiceProvider.GetRequiredService<IMediator>().Send(new ConcreteEntityRequest());
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Errors[0].Code).IsEqualTo("AUTH_DENIED");
+    }
+
+    [Test]
+    public async Task BaseInterfaceAuthorizer_RegisteredDirectlyInContainerAfterAddTecCqrs_FailsClosedOnEverySend()
+    {
+        // Direto no container, depois do AddTecCqrs, o authorizer da interface nunca entra nos alvos do pipeline: a
+        // requisição rodaria sem ele (fail-open). Sem host, a verificação roda na primeira autorização e continua falhando
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddTecCqrs(opt => opt
+            .AddCommandHandler<ConcreteEntityRequest, ConcreteEntityRequestHandler>()
+            .RequireAuthorization = false);
+        services.AddScoped<IRequestAuthorizer<IAuthorizedEntityRequest>, BaseAuthorizer>();
+        await using var sp = services.BuildServiceProvider();
+        await using var scope = sp.CreateAsyncScope();
+        var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
+
+        var ex = await Assert.That(async () => await mediator.Send(new ConcreteEntityRequest())).ThrowsExactly<InvalidOperationException>();
+        await Assert.That(ex!.Message).Contains(typeof(IAuthorizedEntityRequest).FullName!);
+        await Assert.That(ex.Message).Contains("AddRequestAuthorizer");
+        await Assert.That(async () => await mediator.Send(new ConcreteEntityRequest())).ThrowsExactly<InvalidOperationException>();
+    }
+
+    [Test]
+    public async Task BaseInterfaceAuthorizer_RegisteredDirectlyInContainerAfterAddTecCqrs_FailsAtHostStartup()
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddTecCqrs(opt =>
-        {
-            opt.RegisterServicesFromAssemblyContaining<CqrsIssueRegressionTests>();
-            opt.AuthorizersRequireAuthentication = false;
-        });
-
+        services.AddTecCqrs(opt => opt
+                .AddCommandHandler<ConcreteEntityRequest, ConcreteEntityRequestHandler>()
+                .RequireAuthorization = false)
+            .AddAspNetCore();
         services.AddScoped<IRequestAuthorizer<IAuthorizedEntityRequest>, BaseAuthorizer>();
+        await using var sp = services.BuildServiceProvider();
 
-        var sp = services.BuildServiceProvider();
-        var mediator = sp.GetRequiredService<IMediator>();
+        var ex = await Assert.That(async () =>
+        {
+            foreach (var hosted in sp.GetServices<IHostedService>())
+                await hosted.StartAsync(CancellationToken.None);
+        }).ThrowsExactly<InvalidOperationException>();
 
-        var result = await mediator.Send(new ConcreteEntityRequest());
-        await Assert.That(result.IsFailure).IsTrue();
-        await Assert.That(result.Errors[0].Code).IsEqualTo("AUTH_DENIED");
+        await Assert.That(ex!.Message).Contains(typeof(IAuthorizedEntityRequest).FullName!);
+    }
+
+    [Test]
+    public async Task Anonymous_user_is_refused_before_any_authorizer_is_created()
+    {
+        // Só authorizers: o anônimo não pode fazer o container criar o authorizer (e as dependências dele)
+        await using var sp = BuildWithTrackedAuthorizer(principal: null);
+        await using var scope = sp.CreateAsyncScope();
+
+        var result = await scope.ServiceProvider.GetRequiredService<IMediator>().Send(new ConcreteEntityRequest());
+
+        await Assert.That(result.Errors[0].Type).IsEqualTo(ErrorType.Unauthorized);
+        await Assert.That(scope.ServiceProvider.GetRequiredService<CallLog>().Entries).DoesNotContain(TrackedAuthorizer.Created);
+    }
+
+    [Test]
+    public async Task Authenticated_user_gets_the_authorizer_created_and_executed()
+    {
+        await using var sp = BuildWithTrackedAuthorizer(FakePrincipalAccessor.User("maria"));
+        await using var scope = sp.CreateAsyncScope();
+
+        var result = await scope.ServiceProvider.GetRequiredService<IMediator>().Send(new ConcreteEntityRequest());
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(scope.ServiceProvider.GetRequiredService<CallLog>().Entries)
+            .IsEquivalentTo([TrackedAuthorizer.Created, TrackedAuthorizer.Executed]);
+    }
+
+    [Test]
+    public async Task Request_denied_by_attributes_never_creates_the_authorizers()
+    {
+        await using var sp = BuildWithTrackedAuthorizer(FakePrincipalAccessor.User("maria"));
+        await using var scope = sp.CreateAsyncScope();
+
+        var result = await scope.ServiceProvider.GetRequiredService<IMediator>().Send(new AdminEntityRequest());
+
+        await Assert.That(result.Errors[0].Type).IsEqualTo(ErrorType.Forbidden);
+        await Assert.That(scope.ServiceProvider.GetRequiredService<CallLog>().Entries).DoesNotContain(TrackedAuthorizer.Created);
+    }
+
+    private static ServiceProvider BuildWithTrackedAuthorizer(System.Security.Claims.ClaimsPrincipal? principal)
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddScoped<CallLog>();
+        services.AddSingleton<IPrincipalAccessor>(new FakePrincipalAccessor { Principal = principal });
+        services.AddTecCqrs(opt => opt
+            .AddCommandHandler<ConcreteEntityRequest, ConcreteEntityRequestHandler>()
+            .AddCommandHandler<AdminEntityRequest, AdminEntityRequestHandler>()
+            .AddRequestAuthorizer<IAuthorizedEntityRequest, TrackedAuthorizer>());
+        return services.BuildServiceProvider();
     }
 
     public interface IAuthorizedEntityRequest : IBaseRequest;
@@ -128,6 +223,37 @@ public class CqrsIssueRegressionTests
     {
         public Task<Result> AuthorizeAsync(IAuthorizedEntityRequest request, CancellationToken cancellationToken) =>
             Task.FromResult(Result.Failure(Error.Forbidden("AUTH_DENIED", "Access denied by base authorizer")));
+    }
+
+    [AuthorizeRequest(Roles = "Admin")]
+    [SkipValidation]
+    public record AdminEntityRequest : ICommand, IAuthorizedEntityRequest;
+
+    public class AdminEntityRequestHandler : ICommandHandler<AdminEntityRequest>
+    {
+        public Task<Result> Handle(AdminEntityRequest request, CancellationToken cancellationToken) =>
+            Task.FromResult(Result.Success());
+    }
+
+    /// <summary>Authorizer que registra quando é criado e executado (autoriza sempre).</summary>
+    public class TrackedAuthorizer : IRequestAuthorizer<IAuthorizedEntityRequest>
+    {
+        public const string Created = "authorizer-criado";
+        public const string Executed = "authorizer-executado";
+
+        private readonly CallLog _log;
+
+        public TrackedAuthorizer(CallLog log)
+        {
+            _log = log;
+            log.Add(Created);
+        }
+
+        public Task<Result> AuthorizeAsync(IAuthorizedEntityRequest request, CancellationToken cancellationToken)
+        {
+            _log.Add(Executed);
+            return Task.FromResult(Result.Success());
+        }
     }
 
     // Issue #7: Recursão além de MaxRecursionDepth lança InvalidOperationException

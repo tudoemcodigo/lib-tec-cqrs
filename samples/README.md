@@ -6,15 +6,16 @@
 
 # 🧰 Samples
 
-> Dois projetos de apoio, fora dos pacotes (`IsPackable = false`): uma API de pedidos com os usos típicos do TEC.Cqrs e um
-> gerador de carga HTTP próprio, sem licença nem binário externo. Os testes de carga (`TEC.Cqrs.LoadTests`) usam os dois
-> em processo.
+> Três projetos de apoio, fora dos pacotes (`IsPackable = false`): uma API de pedidos com os usos típicos do TEC.Cqrs, um
+> gerador de carga HTTP próprio, sem licença nem binário externo, e um console publicado com Native AOT no CI. Os testes
+> de carga (`TEC.Cqrs.LoadTests`) usam os dois primeiros em processo.
 
 ## 📑 Sumário
 
 - [🎯 Visão geral](#-visão-geral)
 - [🌐 TEC.Cqrs.SampleApi](#-teccqrssampleapi)
 - [🔥 TEC.Cqrs.LoadGenerator](#-teccqrsloadgenerator)
+- [⚡ TEC.Cqrs.AotSample](#-teccqrsaotsample)
 - [🛡️ Segurança](#️-segurança)
 
 ---
@@ -34,6 +35,7 @@ flowchart LR
 |---|---|
 | `TEC.Cqrs.SampleApi` | Minimal API de pedidos: commands e queries com `[AuthorizeRequest]` (policy, papel e dono do recurso), FluentValidation e `IRequestValidator`, transação em memória (`InMemoryUnitOfWork`), commands aninhados, `PublishAfterCommit` e `UseTecExceptionHandler` |
 | `TEC.Cqrs.LoadGenerator` | Gerador em malha fechada: cada worker envia uma requisição, espera a resposta e envia a próxima; relatório com RPS, erros e latências (p50/p95/p99) por cenário |
+| `TEC.Cqrs.AotSample` | Console com `PublishAot`: só registro explícito; o binário nativo confere o pipeline e sai com código 1 se algo falhar |
 
 Os identificadores do código estão em inglês (`Order`, `OrderStore`, `CreateOrderCommand`...); o que é visível na rede e
 na configuração continua em português (rotas `/pedidos`, cabeçalhos `X-Usuario`/`X-Papeis`, claim `cliente_id`, chaves
@@ -121,6 +123,31 @@ argumentos inválidos ou `--url` ausente.
 
 Nos cenários de falha, a resposta esperada é o próprio status de erro: um 200 neles conta como erro, porque seria uma
 falha de segurança.
+
+---
+
+## ⚡ TEC.Cqrs.AotSample
+
+Verificação de Native AOT do job `Native AOT` do `ci.yml`. Usa só o registro explícito (`AddCommandHandler`,
+`AddQueryHandler`, `AddRequestAuthorizer` de interface, `AddRequestValidator`, `AddNotificationHandler`) e o
+`JsonTypeInfoResolver` gerado em compilação, e confere no binário nativo:
+
+| Verificação | Esperado |
+|---|---|
+| O dono cria o pedido | Sucesso, com `begin`, handler, `commit` e a notificação depois do commit |
+| Outro cliente | `PEDIDO_DE_OUTRO_CLIENTE` (authorizer da interface `ICustomerRequest`) |
+| Anônimo | 401, antes de criar o authorizer |
+| Quantidade 0 | `QUANTIDADE_INVALIDA` (validador próprio) |
+| Consulta com `ToHttpResult` | 200 e JSON gerado em compilação |
+
+```bash
+dotnet publish samples/TEC.Cqrs.AotSample -c Release -f net10.0 -r linux-x64 -o artifacts/aot
+./artifacts/aot/TEC.Cqrs.AotSample
+```
+
+O projeto trata todo aviso como erro, inclusive os de trimming/AOT do publish. O link nativo precisa de `clang` e
+`zlib1g-dev` no Linux ou do workload de C++ do Visual Studio no Windows. O FluentValidation fica de fora: a biblioteca de
+terceiros não é anotada para trimming.
 
 ---
 

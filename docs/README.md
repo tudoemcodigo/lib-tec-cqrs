@@ -38,7 +38,7 @@
 | 15 | [🧪 Testes](testes.md) | Suítes, categorias, como rodar local e no CI, variáveis `TEC_CARGA_*`, testes de arquitetura na aplicação |
 | 16 | [💻 Desenvolvimento local](desenvolvimento.md) | Como compilar (feed `tec-interno` por padrão, repositórios vizinhos sob demanda), lock files e arquivos canônicos |
 | 17 | [🔎 Revisão técnica](revisao-tecnica.md) | Revisão de segurança, bugs e organização (2026-10-19), com evidências, correções aplicadas e melhorias priorizadas, e a auditoria de robustez de 2026-10-23 |
-| 18 | [🏛️ Decisões de Arquitetura (ADRs)](adr/README.md) | Registros formais de decisões arquiteturais do TEC.Cqrs alinhadas ao livro *CQRS na Prática* (ADR-0001 a ADR-0010) |
+| 18 | [🏛️ Decisões de Arquitetura (ADRs)](adr/README.md) | Registros formais de decisões arquiteturais do TEC.Cqrs alinhadas ao livro *CQRS na Prática* (ADR-0001 a ADR-0011) |
 
 Fora de `docs/`: [🧰 Samples](../samples/README.md) · [⚙️ CI/CD](../.github/workflows/README.md) · [📝 Changelog](../CHANGELOG.md) · READMEs dos pacotes ([TEC.Cqrs](../TEC.Cqrs/README.md), [AspNetCore](../TEC.Cqrs.AspNetCore/README.md), [FluentValidation](../TEC.Cqrs.FluentValidation/README.md)).
 
@@ -65,7 +65,7 @@ flowchart TD
     K -.-> S["🛡️ seguranca.md"]
     S -.-> T["🧪 testes.md<br/>💻 desenvolvimento.md"]
     S -.-> RV["🔎 revisao-tecnica.md"]
-    RV -.-> ADR["🏛️ adr/README.md<br/><sub>ADR-0001 a 0010</sub>"]
+    RV -.-> ADR["🏛️ adr/README.md<br/><sub>ADR-0001 a 0011</sub>"]
 ```
 
 ---

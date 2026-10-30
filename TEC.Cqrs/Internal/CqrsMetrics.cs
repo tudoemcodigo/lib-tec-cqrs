@@ -46,16 +46,12 @@ internal sealed class CqrsMetrics
 
     private static Histogram<double> CreateDurationHistogram(Meter meter, string name, string description)
     {
-#if NET9_0_OR_GREATER
         return meter.CreateHistogram(name, unit: "s", description: description,
             advice: new InstrumentAdvice<double>
             {
                 // Mesmos limites recomendados pelo OpenTelemetry para http.server.request.duration
                 HistogramBucketBoundaries = [0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10]
             });
-#else
-        return meter.CreateHistogram<double>(name, unit: "s", description: description);
-#endif
     }
 
     /// <summary>Indica se alguém está coletando as métricas de requisição (evita montar as tags à toa).</summary>

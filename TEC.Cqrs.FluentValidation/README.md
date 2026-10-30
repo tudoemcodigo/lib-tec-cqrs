@@ -68,4 +68,4 @@ builder.Services.AddTecCqrs(options => options.AddCommandHandler<CreateCustomerC
 Validação obrigatória, validators de tipo base/interface, `CamelCaseValidationFields` e erros:
 [docs/validacao.md](https://github.com/tudoemcodigo/lib-tec-cqrs/blob/main/docs/validacao.md).
 
-`net8.0` e `net10.0` · Native AOT · [MIT](https://github.com/tudoemcodigo/lib-tec-cqrs/blob/main/LICENSE) · Roberto Oliveira, equipe Tudo em Código
+`net10.0` · Native AOT · [Apache 2.0](https://github.com/tudoemcodigo/lib-tec-cqrs/blob/main/LICENSE) · Roberto Oliveira, equipe Tudo em Código

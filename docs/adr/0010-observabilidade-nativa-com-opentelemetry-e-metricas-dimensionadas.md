@@ -34,7 +34,7 @@ Implementou-se instrumentação nativa zero-dependency baseada nas APIs da BCL d
    - Dimensões estritamente controladas: apenas `cqrs.request`, `cqrs.kind`, `cqrs.outcome` e `error.type` (ex.: `Validation`, `Conflict`); nas notificações, `cqrs.notification`. Nenhuma informação de entidade ou usuário entra nas métricas, garantindo estabilidade e custo zero de memória nos agregadores.
 3. **Supressão Ativa de Logs Redundantes (`LoggedExceptions`):**
    - Uma exceção não tratada é marcada internamente (`LoggedExceptions.TryMark(ex)`).
-   - Se já registrada pelo `LoggingBehavior`, o middleware global de exceção (`TecExceptionHandlerMiddleware`) suprime a gravação redundante, mantendo os logs limpos e fáceis de analisar em incidentes.
+   - Se já registrada pelo `LoggingBehavior`, o middleware global de exceção (`UseTecExceptionHandler`, pelo `SuppressDiagnosticsCallback`) suprime a gravação redundante, mantendo os logs limpos e fáceis de analisar em incidentes.
 4. **Telemetria de Notificações (`NotificationTelemetry`):**
    - Spans específicos para publicação de eventos (`NotificationPublisher`), com atributo `cqrs.notification` e marcação de execução pós-commit (`cqrs.after_commit = true`).
 
@@ -42,8 +42,8 @@ Implementou-se instrumentação nativa zero-dependency baseada nas APIs da BCL d
 
 ### Positivas
 - **Padrão W3C TraceContext Nativo:** Rastreamento ponta a ponta correlacionando requisições HTTP, despacho interno do mediator e chamadas a bancos ou mensageria.
-- **Zero Vazamento de Dados Pessoais:** Conformidade total com a LGPD e políticas corporativas de segurança.
-- **Eficiência e Estabilidade em Alta Escala:** Zero risco de sobrecarga de coletores de métricas.
+- **Sem conteúdo de requisição nos sinais:** o pipeline não registra parâmetros nem payloads em logs, traces ou métricas. Nomes de tipo, códigos de erro e tipos de exceção aparecem nos sinais, e o log recebe a exceção completa; a conformidade com a LGPD continua dependendo do que a aplicação coloca nesses nomes, códigos e mensagens de exceção.
+- **Cardinalidade limitada:** as dimensões das métricas são o nome do tipo da requisição ou da notificação, o tipo, o desfecho e o tipo do erro, todos conjuntos finitos definidos pelo código da aplicação.
 
 ### Negativas / Limitações
 - **Diagnóstico sem Payload:** Para inspecionar o payload exato que provocou uma falha, o desenvolvedor deve recorrer a logs específicos de auditoria ou reprodução controlada em ambiente de homologação.
@@ -55,4 +55,4 @@ Implementou-se instrumentação nativa zero-dependency baseada nas APIs da BCL d
 - Código: `TEC.Cqrs.Diagnostics.CqrsDiagnostics`, `TEC.Cqrs.Internal.CqrsMetrics`, `TEC.Cqrs.Behaviors.LoggingBehavior`.
 
 ---
-⬅️ [ADR-0009](0009-mapeamento-seguro-de-respostas-http-e-mascaramento-de-erros.md) · [🏛️ Índice de ADRs](README.md)
+⬅️ [ADR-0009](0009-mapeamento-seguro-de-respostas-http-e-mascaramento-de-erros.md) · [🏛️ Índice de ADRs](README.md) · [ADR-0011](0011-alvo-unico-net10-e-verificacao-native-aot-por-publicacao.md) ➡️

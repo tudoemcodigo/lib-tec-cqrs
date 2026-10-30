@@ -132,7 +132,8 @@ internal sealed class GetOrderAuthorizer(IPrincipalAccessor user, IOrderReposito
 - O authorizer roda **antes da validação**: trate valores nulos ou inválidos na requisição.
 - Um authorizer sozinho (sem atributo) já conta como autorização declarada e **exige usuário autenticado**
   (`CqrsOptions.AuthorizersRequireAuthentication`, padrão `true`): sem ele, o pipeline retorna 401 `NAO_AUTENTICADO` sem
-  chamar o authorizer. Com a opção desligada (ex.: jobs sem `IPrincipalAccessor`), o authorizer é chamado também sem
+  sequer criar o authorizer (as dependências dele, como `DbContext`, não são instanciadas para o anônimo). Com atributos,
+  os authorizers só são criados depois que os atributos autorizam. Com a opção desligada (ex.: jobs sem `IPrincipalAccessor`), o authorizer é chamado também sem
   usuário (`Principal` nulo ou não autenticado) e precisa negar esse caso por conta própria.
 
 ### Authorizer para várias requisições
@@ -171,8 +172,10 @@ Ordem de execução: os do tipo exato, depois os das classes base, depois os das
 
 > [!WARNING]
 > Authorizers de tipo base ou interface só são executados se registrados **pelo `AddTecCqrs`** (varredura ou
-> `AddRequestAuthorizer`). Registrado direto no container antes do `AddTecCqrs`, a inicialização falha (ele nunca rodaria
-> e a requisição ficaria desprotegida). Registros feitos no container **depois** do `AddTecCqrs` não são verificados.
+> `AddRequestAuthorizer`). Registrado direto no container, ele nunca rodaria e a requisição ficaria desprotegida, então a
+> configuração é recusada: antes do `AddTecCqrs`, a própria chamada falha; depois, a subida do host falha (com
+> `.AddAspNetCore()`) e, sem host, o primeiro `Send` lança `InvalidOperationException` (e continua lançando). Executar esse
+> registro tardio exigiria reflexão em execução, o que quebraria a compatibilidade com Native AOT.
 
 ### De onde vem o usuário
 
@@ -250,7 +253,7 @@ builder.Services.Replace(ServiceDescriptor.Scoped<IPrincipalAccessor, SecurityPr
 | Opção | Padrão | Descrição |
 |---|---|---|
 | `CqrsOptions.RequireAuthorization` | `true` | Toda requisição declara autorização (`[AuthorizeRequest]`, `[RequirePermission]`, `IRequestAuthorizer` do tipo, de base, de interface ou genérico aberto, ou `[AllowAnonymousRequest]`). Verificado no `AddTecCqrs` e, para handlers registrados direto no container, no `Send` |
-| `CqrsOptions.AuthorizersRequireAuthentication` | `true` | Requisição autorizada só por `IRequestAuthorizer` (sem atributo) exige usuário autenticado (401 antes dos authorizers). `[AllowAnonymousRequest]` não é afetado |
+| `CqrsOptions.AuthorizersRequireAuthentication` | `true` | Requisição autorizada só por `IRequestAuthorizer` (sem atributo) exige usuário autenticado (401 antes de criar os authorizers). `[AllowAnonymousRequest]` não é afetado |
 | `CqrsOptions.AddRequestAuthorizer<TRequest, TAuthorizer>()` | — | Registra um authorizer (tipo exato, base ou interface) sem reflexão |
 | `CqrsAspNetCoreOptions.ReplaceExistingPrincipalAccessor` | `false` | Substitui um `IPrincipalAccessor` registrado antes do `AddAspNetCore` pelo do `HttpContext` |
 
@@ -272,7 +275,7 @@ builder.Services.Replace(ServiceDescriptor.Scoped<IPrincipalAccessor, SecurityPr
 | `InvalidOperationException` "A requisição '...' não declara autorização" | — | `Send` de requisição cujo handler foi registrado direto no container, sem autorização | Idem |
 | `InvalidOperationException` "possui [AllowAnonymousRequest] e [AuthorizeRequest]" | — | Marcações contraditórias | Use só um |
 | `InvalidOperationException` "possui [AuthorizeRequest] com Policy em branco" / "com Roles sem nenhum papel" | — | `Policy = " "` ou `Roles = ","` | Informe o valor ou remova a propriedade |
-| `InvalidOperationException` "O authorizer '...' de '...' foi registrado direto no container" | — | Authorizer de base/interface (ou de tipo desconhecido) no container antes do `AddTecCqrs` | Use `AddRequestAuthorizer` ou a varredura |
+| `InvalidOperationException` "O authorizer '...' de '...' foi registrado direto no container" | — | Authorizer de base/interface (ou de tipo desconhecido) no container: antes do `AddTecCqrs` (na chamada) ou depois (na subida do host ou no primeiro `Send`) | Use `AddRequestAuthorizer` ou a varredura |
 | `InvalidOperationException` "...usa a policy '...', mas nenhum IRequestPolicyEvaluator está registrado" | — | Policy sem avaliador | `.AddAspNetCore()` + `AddAuthorization`, ou registre o seu avaliador |
 | `InvalidOperationException` "...mas o IAuthorizationService não está registrado" | — | `.AddAspNetCore()` sem `AddAuthorization` | Chame `services.AddAuthorization(...)` |
 | `InvalidOperationException` "O authorizer '...' retornou null" | — | Authorizer retornou `null` | Retorne sempre um `Result` |

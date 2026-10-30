@@ -26,8 +26,7 @@ internal static class ResultFactory<TResponse>
 
     public static void Register(Func<Error[], TResponse> factory) => Interlocked.CompareExchange(ref _factory, factory, null);
 
-    [UnconditionalSuppressMessage("AOT", "IL3050:RequiresDynamicCode",
-        Justification = "Só usa reflexão quando RuntimeFeature.IsDynamicCodeSupported é true (verificado abaixo); o .NET 8 não reconhece essa verificação.")]
+    // Sem supressão de IL3050: o analisador reconhece a verificação de RuntimeFeature.IsDynamicCodeSupported abaixo
     private static Func<Error[], TResponse> CreateFactory()
     {
         bool isGenericResult = typeof(TResponse).IsGenericType && typeof(TResponse).GetGenericTypeDefinition() == typeof(Result<>);

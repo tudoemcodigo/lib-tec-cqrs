@@ -12,9 +12,12 @@ public static class IdempotencyServiceCollectionExtensions
     /// desenvolvimento e aplicações de uma única instância. Não substitui um store registrado antes.
     /// </summary>
     /// <param name="services">Container.</param>
-    /// <param name="configure">Opções (limites de entradas, total e por escopo).</param>
+    /// <param name="configure">Opções (limites de entradas, total e por escopo, e orçamento de bytes).</param>
     /// <returns>O próprio <paramref name="services"/>.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">Limite de entradas (total ou por escopo) menor que 1.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Limite de entradas (total ou por escopo) ou <see cref="InMemoryIdempotencyStoreOptions.MaxTotalBytes"/> menor que 1
+    /// (validado aqui, na subida, e não na primeira requisição).
+    /// </exception>
     /// <example>
     /// <code>
     /// builder.Services.AddInMemoryIdempotencyStore(o => o.MaxEntries = 50_000);
@@ -27,8 +30,7 @@ public static class IdempotencyServiceCollectionExtensions
 
         var options = new InMemoryIdempotencyStoreOptions();
         configure?.Invoke(options);
-        ArgumentOutOfRangeException.ThrowIfLessThan(options.MaxEntries, 1, nameof(configure));
-        ArgumentOutOfRangeException.ThrowIfLessThan(options.MaxEntriesPerScope, 1, nameof(configure));
+        options.Validate(nameof(configure));
 
         services.TryAddSingleton<IIdempotencyStore>(sp => new InMemoryIdempotencyStore(options, sp.GetService<TimeProvider>()));
         return services;

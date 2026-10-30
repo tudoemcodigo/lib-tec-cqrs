@@ -2,8 +2,9 @@
 
   <!--
     Testes de carga, performance e segurança sob carga: concorrência, alocação por Send, volume, soak (longa duração),
-    carga HTTP e ataques na API de exemplo. Os testes rápidos (Carga-CI) rodam no CI a cada pull request; os pesados têm [Explicit] e só
-    rodam quando selecionados por filtro (veja docs/testes.md). Framework, lock file e auditoria em ../Directory.Build.props.
+    carga HTTP e ataques na API de exemplo. Nada daqui roda no CI de pull request: os testes rápidos (Carga-CI) e os pesados
+    (Carga-Pesada, com [Explicit]) só rodam sob demanda, no workflow manual performance.yml, ou localmente com filtro (veja
+    docs/testes.md). Framework, lock file e auditoria em ../build/Tec.Build.props.
   -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>

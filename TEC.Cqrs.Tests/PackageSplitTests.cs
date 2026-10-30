@@ -268,7 +268,7 @@ public class AspNetCoreIntegrationTests
     [Test]
     public async Task UseTecExceptionHandler_does_not_log_pipeline_exception_again()
     {
-        // .NET 10: SuppressDiagnosticsCallback; .NET 8: middleware próprio com o mesmo comportamento
+        // SuppressDiagnosticsCallback do UseExceptionHandler: a exceção já registrada pelo pipeline não é registrada de novo
         var (status, logs) = await RunExceptionHandlerAsync(async context =>
             await context.RequestServices.GetRequiredService<ISender>().Send(new FailCommand()));
 

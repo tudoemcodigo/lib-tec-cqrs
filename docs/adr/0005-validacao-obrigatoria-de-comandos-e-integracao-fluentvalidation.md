@@ -32,7 +32,7 @@ Decidiu-se pela **validação obrigatória de comandos (*Fail Closed*)**, com de
 ## Consequências
 
 ### Positivas
-- **Zero Comandos Sem Validação em Produção:** Com `.AddAspNetCore()`, a aplicação não sobe com comandos esquecidos sem validação.
+- **Comandos sem validação não chegam a produção:** Com `.AddAspNetCore()`, a aplicação não sobe se algum comando conhecido (com handler registrado no `AddTecCqrs` ou encontrado na varredura) estiver sem validador. Um comando de handler registrado direto no container só é verificado na execução.
 - **Formatação Homogênea de Resposta:** Campos inválidos saem no padrão camelCase correspondente ao JSON da API (ex.: `itens[0].quantidade`), prontos para consumo por front-ends modernos.
 - **Desacoplamento Tecnológico:** O núcleo `TEC.Cqrs` permanece livre de dependências de terceiros.
 

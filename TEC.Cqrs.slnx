@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/samples/">
+    <Project Path="samples/TEC.Cqrs.AotSample/TEC.Cqrs.AotSample.csproj" />
     <Project Path="samples/TEC.Cqrs.LoadGenerator/TEC.Cqrs.LoadGenerator.csproj" />
     <Project Path="samples/TEC.Cqrs.SampleApi/TEC.Cqrs.SampleApi.csproj" />
   </Folder>

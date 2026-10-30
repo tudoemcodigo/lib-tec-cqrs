@@ -141,6 +141,25 @@ public class HttpResultTests
     }
 
     [Test]
+    public async Task NoContent_status_code_is_the_status_actually_written_for_mixed_errors()
+    {
+        // O FromResult trata a resposta inteira como interna se qualquer erro for interno; o StatusCode exposto (OpenAPI,
+        // filtros, testes) não pode seguir só o primeiro erro e divergir do que vai para o cliente
+        var internalLast = Result.Failure(Error.Validation("CAMPO", "Campo inválido.", "campo"), Error.Failure("DB", "detalhe interno"));
+        var externalLast = Result.Failure(Error.NotFound("ITEM", "Item não encontrado."), Error.ExternalService("GATEWAY", "detalhe"));
+
+        foreach (var (result, expected) in new[] { (internalLast, 500), (externalLast, 502) })
+        {
+            var http = result.ToNoContentHttpResult();
+            var (context, body) = await ExecuteAsync(http);
+
+            await Assert.That(http.StatusCode).IsEqualTo(expected);
+            await Assert.That(context.Response.StatusCode).IsEqualTo(http.StatusCode);
+            await Assert.That(body.GetProperty("errors").GetArrayLength()).IsEqualTo(0);
+        }
+    }
+
+    [Test]
     public async Task HttpConcurrencyExtensions_generates_and_extracts_etag()
     {
         byte[] version = [0x01, 0x02, 0x03, 0x04];

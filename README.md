@@ -6,10 +6,10 @@
 
 **Commands, queries e notificações com um pipeline seguro por padrão: autorização, validação, transação, log e telemetria aplicados a cada requisição, em qualquer ponto de entrada (API, job ou mensageria).**
 
-Mediator próprio · `Result` em vez de exceção · Autorização e validação obrigatórias · Transação por command · Eventos após o commit · .NET 8 e 10 · Native AOT
+Mediator próprio · `Result` em vez de exceção · Autorização e validação obrigatórias · Transação por command · Eventos após o commit · .NET 10 · Native AOT
 
 [![CI](https://github.com/tudoemcodigo/lib-tec-cqrs/actions/workflows/ci.yml/badge.svg)](https://github.com/tudoemcodigo/lib-tec-cqrs/actions/workflows/ci.yml)
-[![.NET](https://img.shields.io/badge/.NET-8.0%20%7C%2010.0-512BD4?logo=dotnet&logoColor=white)](#-compatibilidade)
+[![.NET](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet&logoColor=white)](#-compatibilidade)
 [![Native AOT](https://img.shields.io/badge/Native%20AOT-compat%C3%ADvel-512BD4)](#-compatibilidade)
 [![Versão](https://img.shields.io/badge/vers%C3%A3o-0.0.1-blue)](CHANGELOG.md)
 [![Licença: Apache 2.0](https://img.shields.io/badge/licen%C3%A7a-Apache%202.0-blue)](LICENSE)
@@ -67,7 +67,7 @@ Mediator próprio · `Result` em vez de exceção · Autorização e validação
 > [!IMPORTANT]
 > **Use todos os pacotes `TEC.Cqrs.*` na mesma versão.** Os pacotes satélite (`AspNetCore` e `FluentValidation`) usam
 > tipos internos do núcleo (`InternalsVisibleTo`) e são publicados juntos, a cada release, com a mesma versão. Misturar
-> versões (ex.: `TEC.Cqrs` 0.0.2 com `TEC.Cqrs.AspNetCore` 0.0.1) pode falhar em execução com `MissingMethodException` ou
+> versões (ex.: `TEC.Cqrs` numa prévia `0.0.1-preview.N` com `TEC.Cqrs.AspNetCore` 0.0.1) pode falhar em execução com `MissingMethodException` ou
 > `TypeLoadException`.
 
 ## 🧬 Ecossistema TEC
@@ -120,8 +120,9 @@ dotnet add package TEC.Cqrs --version 0.0.1
 ```
 
 > [!IMPORTANT]
-> Versão atual: **0.0.1** (ainda não publicada). Instale **a mesma versão** em todos os `TEC.Cqrs.*`; com Central Package
-> Management, declare-os juntos no `Directory.Packages.props`. Para evitar *dependency confusion*, mapeie `TEC.*` só para a
+> Versão atual: **0.0.1**, a primeira publicação (a tag `v0.0.1` é criada pelo workflow **Publicar versão**).
+> Instale **a mesma versão** em todos os `TEC.Cqrs.*`; com Central Package Management, declare-os juntos no
+> `Directory.Packages.props`. Para evitar *dependency confusion*, mapeie `TEC.*` só para a
 > origem `tec-interno` no `nuget.config` da aplicação (`packageSourceMapping`).
 
 ## 🚀 Início rápido
@@ -243,8 +244,8 @@ Autorização vem **antes** da validação (quem não tem acesso não descobre a
 
 | Item | Suporte |
 |---|---|
-| .NET | `net8.0` e `net10.0` (LTS), mesma API e mesmo comportamento nos dois alvos |
-| Native AOT / trimming | ✅ `IsAotCompatible` nos três pacotes; registro explícito e `JsonTypeInfoResolver` ([⚡ AOT](docs/aot.md)). A varredura de assemblies usa reflexão (avisos IL2026/IL3050) |
+| .NET | `net10.0` (LTS). Sem suporte a `net8.0` |
+| Native AOT / trimming | ✅ `IsAotCompatible` nos três pacotes e publicação real com `PublishAot` no CI (`samples/TEC.Cqrs.AotSample`); registro explícito e `JsonTypeInfoResolver` ([⚡ AOT](docs/aot.md)). A varredura de assemblies usa reflexão (avisos IL2026/IL3050) |
 | Sem ICU (`InvariantGlobalization`) | ✅ testado no CI |
 | Pontos de entrada | ASP.NET Core (Minimal APIs e Controllers), workers, `BackgroundService`, consumidores de fila, testes |
 | Containers de DI | `Microsoft.Extensions.DependencyInjection` (recomendado); outros funcionam sem as otimizações de `IServiceProviderIsService` |
@@ -268,15 +269,15 @@ dotnet test --project TEC.Cqrs.Tests -c Release                                 
 dotnet test --project TEC.Cqrs.LoadTests -c Release --treenode-filter "/*/*/*/*[Category=Carga-CI]"   # carga rápida
 ```
 
-280 testes por execução em `net10.0` e 287 em `net8.0` no `TEC.Cqrs.Tests` (TUnit: pipeline, regressão, segurança,
-robustez, permissões, idempotência, HTTP e divisão dos pacotes) a cada PR, 13 de carga rápida (`Carga-CI`) e 7 pesados
+Testes do `TEC.Cqrs.Tests` em `net10.0`, com e sem ICU (TUnit: pipeline, regressão, segurança, robustez, permissões,
+idempotência, HTTP e divisão dos pacotes) a cada PR, publicação Native AOT do sample de verificação, 13 de carga rápida (`Carga-CI`) e 7 pesados
 (`Carga-Pesada`: vazão, volume, soak e carga sustentada na API de exemplo, ~4–5 min com `TEC_CARGA_FATOR=1`), estes de
 carga só sob demanda no `performance.yml` manual. Não há testes de integração externa: o TEC.Cqrs não acessa rede nem banco. Detalhes em
 [docs/testes.md](docs/testes.md).
 
 ## 🤝 Contribuição
 
-Branch a partir da `main` → código **e** testes (inclusive o caminho negado e o inválido) → `dotnet test` nos dois alvos
+Branch a partir da `main` → código **e** testes (inclusive o caminho negado e o inválido) → `dotnet test`
 → CHANGELOG e `docs/` atualizados → pull request com o check `ci / ci-ok` verde. Como compilar (credencial do feed
 `tec-interno`, modo local com `-p:TecUseLocalProjects=true`): [docs/desenvolvimento.md](docs/desenvolvimento.md).
 

@@ -98,6 +98,7 @@ Extensões que o usam:
 | Handlers, notification handlers, authorizers, validadores | `Scoped` |
 | `CqrsOptions` e o registro interno (handlers em `FrozenDictionary`) | `Singleton` |
 | Métricas (`Meter` `TEC.Cqrs`) | `Singleton` |
+| `IPermissionChecker` (`ClaimPermissionChecker`, só se ainda não houver um registrado) | `Singleton` |
 
 Não registra `IUnitOfWork`, `IPrincipalAccessor` nem `IRequestPolicyEvaluator`: são da aplicação (ou dos satélites).
 
@@ -112,7 +113,7 @@ Não registra `IUnitOfWork`, `IPrincipalAccessor` nem `IRequestPolicyEvaluator`:
 | `[AllowAnonymousRequest]` junto com `[AuthorizeRequest]`; `Roles`/`Policy` em branco | Falha |
 | Mais de um handler para a mesma requisição | Falha |
 | Handler registrado à mão com tempo de vida diferente de `Scoped` | Falha |
-| Authorizer de tipo base/interface (ou de tipo desconhecido) registrado direto no container | Falha |
+| Authorizer de tipo base/interface (ou de tipo desconhecido) registrado direto no container | Falha (registrado depois do `AddTecCqrs`: na subida do host com `.AddAspNetCore()` ou no primeiro `Send`) |
 | Validador de tipo que não é requisição concreta conhecida | Falha |
 | Requisição sem autorização declarada (com `RequireAuthorization`) | Falha, listando até 20 requisições |
 | Command conhecido sem validador nem `[SkipValidation]` (com `RequireValidatorForCommands` e `.AddAspNetCore()`) | Falha na **subida do host** (os validadores só ficam completos depois do `AddTecCqrs`), listando até 20 commands |

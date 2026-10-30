@@ -37,3 +37,39 @@ jobs:
       solution: TEC.Cqrs.slnx
       private-feed: true
       unit-tests: TEC.Cqrs.Tests
+
+  # Native AOT de verdade (além dos analisadores do build): publica o samples/TEC.Cqrs.AotSample com PublishAot, com
+  # qualquer aviso de trimming/AOT como erro, e executa o binário nativo, que confere despacho, autorização, validação,
+  # transação, notificação pós-commit e JSON. Fora do ci-ok (workflow central): para bloquear o merge, inclua o check
+  # "Native AOT" na proteção da main.
+  aot:
+    name: Native AOT
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: read   # TEC.Core do feed interno
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup .NET
+        uses: tudoemcodigo/tec-workflows/actions/setup-dotnet@v1
+        with:
+          private-feed: true
+          nuget-token: ${{ github.token }}
+          restore: samples/TEC.Cqrs.AotSample/TEC.Cqrs.AotSample.csproj
+
+      # Pré-requisitos do Native AOT no Linux (normalmente já presentes na imagem)
+      - name: clang e zlib
+        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends clang zlib1g-dev
+
+      - name: Publicar com Native AOT
+        run: >
+          dotnet publish samples/TEC.Cqrs.AotSample/TEC.Cqrs.AotSample.csproj -c Release -f net10.0 -r linux-x64 --no-restore
+          -o artifacts/aot -warnaserror
+
+      - name: Executar o binário nativo
+        run: ./artifacts/aot/TEC.Cqrs.AotSample

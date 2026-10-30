@@ -11,6 +11,7 @@
   - [Registrar](#registrar)
   - [Marcar endpoints](#marcar-endpoints)
   - [Escolher o store](#escolher-o-store)
+  - [Store em memória: limites e despejo](#store-em-memória-limites-e-despejo)
   - [Store próprio](#store-próprio)
 - [⚙️ Opções](#️-opções)
 - [❌ Erros](#-erros)
@@ -25,7 +26,7 @@
 |---|---|---|
 | `IIdempotencyStore` | `TEC.Cqrs` (`TEC.Cqrs.Idempotency`) | Reserva a chave, guarda e devolve a resposta |
 | `InMemoryIdempotencyStore` / `AddInMemoryIdempotencyStore()` | `TEC.Cqrs` | Store em memória (uma instância, testes) |
-| `EfIdempotencyStore<TContext>` / `AddTecOrmIdempotency<TContext>()` | `TEC.ORM.SqlServer` | Store no banco (várias instâncias) |
+| `EfIdempotencyStore<TContext>` / `AddTecOrmIdempotency<TContext>()` | `TEC.ORM.EntityFrameworkCore` (o `AddTecOrmIdempotency` também existe no `TEC.ORM.SqlServer`) | Store no banco (várias instâncias) |
 | `.AddIdempotency()` / `IdempotencyOptions` | `TEC.Cqrs.AspNetCore` (`TEC.Cqrs.AspNetCore.Idempotency`) | Configuração |
 | `app.UseTecIdempotency()` | `TEC.Cqrs.AspNetCore` | Middleware |
 | `.WithIdempotency()` / `[Idempotent]` | `TEC.Cqrs.AspNetCore` | Marca o endpoint |
@@ -62,9 +63,12 @@ Regras:
 | Mesma chave e mesmo conteúdo, concluída | Devolve a resposta guardada + `Idempotent-Replayed: true` (não executa) |
 | Mesma chave, outra execução em andamento | **409** `IDEMPOTENCIA_EM_ANDAMENTO` (tente de novo em instantes) |
 | Mesma chave com outro conteúdo (método, caminho, query, corpo ou cabeçalhos de `HashedRequestHeaders`) | **422** `IDEMPOTENCY_KEY_REUTILIZADA` |
-| Resposta não 2xx ou exceção | Não guarda e **libera** a chave (o cliente pode tentar de novo) |
+| Resposta não 2xx, ou exceção antes de qualquer efeito (sem transação confirmada e sem resposta 2xx escrita) | Não guarda e **libera** a chave (o cliente pode tentar de novo) |
+| Resposta não 2xx depois de um command confirmar a transação do pipeline, ou exceção depois do commit ou de uma resposta 2xx já escrita | Não guarda e **mantém** a reserva até o `LockTimeout` (a operação teve efeito): a repetição recebe 409 até lá |
 | Cliente desconecta depois da resposta 2xx | A resposta já foi guardada antes do envio: a repetição recebe a resposta guardada |
-| Cliente desconecta e o endpoint é cancelado (`OperationCanceledException`) depois de status 2xx | A reserva é **mantida** até o `LockTimeout` (a operação pode ter sido confirmada): a repetição recebe 409 até lá |
+| Cliente desconecta e o endpoint é cancelado (`OperationCanceledException`) depois de a operação ter efeito: transação do pipeline confirmada ou resposta 2xx já escrita | A reserva é **mantida** até o `LockTimeout`: a repetição recebe 409 até lá |
+| Cliente desconecta e o endpoint é cancelado antes de qualquer efeito (sem commit e sem bytes de resposta 2xx; o status 2xx sozinho não conta) | Não guarda e **libera** a chave: a repetição executa |
+| O store falha ao guardar a resposta 2xx | Mais 2 tentativas (esperas de 50 e 200 ms). Se todas falharem, a resposta vai ao cliente assim mesmo, a reserva fica até o `LockTimeout` e o evento 1027 é registrado |
 | Requisição sem usuário identificado, cabeçalho opcional | Executa **sem** idempotência (não há escopo seguro); aviso em log se o usuário estiver autenticado sem claim de id |
 | Requisição sem usuário identificado, `keyRequired` | **401** para o anônimo; **500** `IDEMPOTENCIA_SEM_ESCOPO` para o usuário autenticado sem claim de id (erro de configuração). Não executa |
 
@@ -118,8 +122,32 @@ Também funciona em grupos: `app.MapGroup("/api").WithIdempotency()`.
 
 | Store | Quando usar |
 |---|---|
-| `AddInMemoryIdempotencyStore()` | Testes, desenvolvimento, uma única instância. Limites de entradas: `MaxEntries` (padrão 10.000) e `MaxEntriesPerScope` (padrão 1.000; no limite, o usuário descarta as próprias respostas mais antigas, não as dos outros) |
+| `AddInMemoryIdempotencyStore()` | Testes, desenvolvimento, uma única instância. Limites: `MaxEntries` (padrão 10.000), `MaxEntriesPerScope` (padrão 1.000) e `MaxTotalBytes` (padrão 256 MiB). Veja [o despejo do store em memória](#store-em-memória-limites-e-despejo) |
 | `AddTecOrmIdempotency<TContext>()` (TEC.ORM) | Produção com várias instâncias: reserva atômica no banco, limpeza periódica |
+
+### Store em memória: limites e despejo
+
+| Opção (`InMemoryIdempotencyStoreOptions`) | Padrão | Descrição |
+|---|---|---|
+| `MaxEntries` | 10.000 | Máximo de chaves guardadas no total |
+| `MaxEntriesPerScope` | 1.000 | Máximo de chaves por escopo (usuário) |
+| `MaxTotalBytes` | 256 MiB | Orçamento das respostas guardadas: corpo mais o texto do content type e dos cabeçalhos, a 2 bytes por caractere |
+
+Os três são validados no `AddInMemoryIdempotencyStore` (valor menor que 1: `ArgumentOutOfRangeException` na subida).
+Quando falta espaço, o store descarta primeiro as entradas expiradas, de qualquer escopo, e depois as respostas
+concluídas **do próprio escopo** de quem está pedindo, das que expiram primeiro. Reservas em andamento nunca saem.
+
+Respostas ainda válidas de **outros** escopos também nunca saem. Descartá-las abriria espaço, mas a repetição do outro
+usuário executaria a operação de novo sem ninguém perceber (o problema que a idempotência existe para evitar). Sem espaço
+depois do despejo permitido, o store falha fechado com `InvalidOperationException`:
+
+- em `TryBeginAsync` (limite de entradas, ou `MaxTotalBytes` já esgotado), antes de executar a operação: a requisição
+  recebe 500 e nada é executado;
+- em `CompleteAsync`, se a resposta não couber no orçamento: o middleware tenta de novo, envia a resposta ao cliente e a
+  reserva fica em andamento até o `LockTimeout` (evento 1027).
+
+Dimensione os limites para o pico de usuários ativos na janela de `Retention`. Com muitas recusas, a saída é aumentar os
+limites, reduzir `Retention`/`MaxResponseBodyBytes` ou usar um store compartilhado.
 
 ### Store próprio
 
@@ -134,7 +162,7 @@ Implemente `IIdempotencyStore` (ex.: Redis com `SET NX PX`). Contrato:
   verifica o pedido).
 
 > [!NOTE]
-> O `EfIdempotencyStore` do TEC.ORM (`TEC.ORM.SqlServer`) já usa a collation binária `Latin1_General_100_BIN2` nas colunas
+> O `EfIdempotencyStore` do TEC.ORM (`TEC.ORM.EntityFrameworkCore`) já usa a collation binária `Latin1_General_100_BIN2` nas colunas
 > `Scope`/`IdempotencyKey`, com o mesmo comportamento ordinal do store em memória.
 
 ---
@@ -187,8 +215,13 @@ Implemente `IIdempotencyStore` (ex.: Redis com `SET NX PX`). Contrato:
 > A resposta guardada é devolvida a quem repetir a chave **do mesmo usuário**. Não marque como idempotentes endpoints cuja resposta muda conforme permissões que podem ser revogadas no intervalo de `Retention` sem considerar esse efeito.
 
 - A chave e o corpo nunca vão para o log; o store guarda o hash do escopo, não o id do usuário.
-- Limites de corpo (requisição e resposta) evitam uso do store como depósito de dados; no store em memória, a cota por
-  escopo impede que um usuário descarte as respostas guardadas dos outros.
+- Limites de corpo (requisição e resposta) evitam uso do store como depósito de dados. No store em memória, nenhum
+  usuário descarta as respostas guardadas dos outros: nem pela cota por escopo, nem no limite total, nem no orçamento de
+  bytes.
+- O store em memória limita a quantidade de entradas e os bytes (`MaxTotalBytes`, padrão 256 MiB). Sem o orçamento, o pior
+  caso com os padrões (10.000 entradas, até 1 MiB cada) chegaria a cerca de 10 GiB.
+- O log de falha ao guardar a resposta (1026/1027) leva só o tipo da exceção: nem a chave, nem o corpo, nem a mensagem da
+  exceção do store (que pode trazer detalhes de conexão).
 - O hash inclui método, caminho, query, os cabeçalhos de `HashedRequestHeaders` e o corpo (SHA-256).
 - Claims de identidades não autenticadas do principal não definem o escopo.
 - `keyRequired` é garantia: o endpoint não executa sem reserva.
@@ -205,9 +238,27 @@ A reserva expira em `LockTimeout`; depois disso, a próxima requisição com a c
 <summary><b>E se o cliente desistir (timeout) antes de receber a resposta?</b></summary>
 
 Se o endpoint terminou, a resposta já foi guardada antes do envio: a repetição recebe a resposta original
-(`Idempotent-Replayed: true`). Se o endpoint foi interrompido pelo cancelamento (`OperationCanceledException`) depois de
-definir um status 2xx, não há como saber se a operação foi confirmada: a reserva fica até o `LockTimeout` (repetições
-recebem 409) e o evento 1023 é registrado. `ToHttpResult`/`ToCreatedHttpResult` não cancelam a escrita da resposta.
+(`Idempotent-Replayed: true`). Se o endpoint foi interrompido pelo cancelamento (`OperationCanceledException`), a decisão
+depende do que já foi efetivado:
+
+- transação do pipeline confirmada, ou resposta 2xx já escrita (bytes no buffer ou já enviados): a reserva fica até o
+  `LockTimeout` (repetições recebem 409) e o evento 1023 é registrado;
+- nada disso: a chave é liberada e a repetição executa. O `Response.StatusCode` sozinho não conta, porque começa em 200 e
+  o endpoint pode defini-lo antes de executar a operação.
+
+Um endpoint que grava sem a transação do pipeline e é cancelado antes de escrever a resposta não deixa sinal de efeito:
+a chave é liberada. Nesse caso, use a transação do pipeline (`IUnitOfWork`) ou trate o cancelamento no próprio endpoint.
+`ToHttpResult`/`ToCreatedHttpResult` não cancelam a escrita da resposta.
+</details>
+
+<details>
+<summary><b>E se o store falhar ao guardar a resposta?</b></summary>
+
+Se `CompleteAsync` lançar exceção (ex.: banco instável), o middleware tenta de novo mais 2 vezes, com esperas de 50 e
+200 ms (evento 1026 a cada falha). Se todas falharem, a resposta é enviada ao cliente assim mesmo (a operação já foi
+executada) e o evento 1027 é registrado. A reserva fica até o `LockTimeout`; depois desse prazo, a repetição com a mesma
+chave executa a operação de novo. Use um store com a mesma disponibilidade do banco da operação e um `LockTimeout` que
+cubra a recuperação esperada.
 </details>
 
 <details>

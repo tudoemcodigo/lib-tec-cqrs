@@ -31,9 +31,9 @@ Adotou-se o padrão Mediator in-process arquitetado com três decisões nucleare
 ## Consequências
 
 ### Positivas
-- **Compatibilidade Nativa com Native AOT:** Nenhum `MakeGenericType` ou reflexão ocorre após o boot da aplicação. Compatível com `PublishAot=true` em .NET 8 e .NET 10.
+- **Compatibilidade com Native AOT:** o despacho dos handlers registrados pelo `AddTecCqrs` não usa `MakeGenericType` nem reflexão por chamada. A única exceção fora do registro explícito são os handlers registrados direto no container (só em JIT, pelo `CqrsRegistry.CreateDynamicHandler`, protegido por `RuntimeFeature.IsDynamicCodeSupported`). Os authorizers de classes base e interfaces que se aplicam a cada requisição conhecida são calculados no `AddTecCqrs`, sem `GetInterfaces`, `MakeGenericType` nem `Activator` em execução. A verificação combina os analisadores de AOT e trimming (avisos como erro) com o job `Native AOT` do CI, que publica o `samples/TEC.Cqrs.AotSample` com `PublishAot=true` e executa o binário.
 - **Zero Overhead de Despacho:** Latência de despacho desprezível em relação à execução direta do handler de negócio.
-- **Fail-Fast no Boot:** Handlers duplicados para a mesma requisição ou requisições registradas com tempo de vida inválido (ex.: Singleton) geram falha imediata na inicialização do container (`InvalidOperationException`).
+- **Fail-Fast no Boot:** Handlers duplicados para a mesma requisição ou handlers registrados direto no container com tempo de vida diferente de `Scoped` (ex.: Singleton) geram falha imediata na inicialização do container (`InvalidOperationException`).
 
 ### Negativas / Limitações
 - **Varredura por Assembly requer JIT:** A descoberta automática de handlers via `RegisterServicesFromAssembly` usa reflexão de inspeção. Em ambientes Native AOT com trimming extremo, o desenvolvedor deve utilizar o registro explícito de cada handler (`AddCommandHandler` / `AddQueryHandler`).

@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Verificação de Native AOT do TEC.Cqrs (job "Native AOT" do .github/workflows/ci.yml): console com PublishAot que usa
+    só o registro explícito e confere, no binário nativo, despacho, autorização por interface, validação, transação,
+    notificação pós-commit e JSON das respostas. Qualquer aviso de trimming/AOT (IL2xxx/IL3xxx) no publish vira erro.
+    O FluentValidation fica de fora: a biblioteca de terceiros não é anotada para trimming. Uso em samples/README.md.
+    Framework, lock file e auditoria em ../../build/Tec.Build.props.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <PublishAot>true</PublishAot>
+    <!-- RIDs no restore: o lock file traz os pacotes do compilador nativo e o CI publica com restore em modo travado -->
+    <RuntimeIdentifiers>linux-x64;win-x64</RuntimeIdentifiers>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- Um aviso por ocorrência (e não um IL2104 por assembly), para o log do CI apontar o código exato -->
+    <TrimmerSingleWarn>false</TrimmerSingleWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\TEC.Cqrs\TEC.Cqrs.csproj" />
+    <ProjectReference Include="..\..\TEC.Cqrs.AspNetCore\TEC.Cqrs.AspNetCore.csproj" />
+  </ItemGroup>
+
+</Project>
