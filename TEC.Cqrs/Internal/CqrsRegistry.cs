@@ -21,6 +21,7 @@ internal sealed class CqrsRegistry
     private readonly NotificationTarget[] _notificationTargets;
     private readonly AuthorizerTarget[] _authorizerTargets;
     private readonly FrozenDictionary<Type, AuthorizerTarget[]> _authorizersByRequest;
+    private readonly FrozenSet<Type> _declaredAuthorizerTypes;
     private readonly ConcurrentDictionary<(Type Request, Type Response), RequestHandlerWrapper> _dynamicHandlers = new();
     private readonly ConcurrentDictionary<(Type Concrete, Type Static), NotificationTarget[]> _notificationCache = new();
     private readonly ConcurrentDictionary<Type, AuthorizerTarget[]> _authorizerCache = new();
@@ -44,6 +45,7 @@ internal sealed class CqrsRegistry
             .ToFrozenDictionary(g => g.Key, g => g.First().Wrapper);
         _notificationTargets = [.. options.NotificationHandlers.Select(n => n.Target).DistinctBy(t => t.TargetType)];
         _authorizerTargets = [.. options.Authorizers.Select(a => a.Target).DistinctBy(t => t.TargetType)];
+        _declaredAuthorizerTypes = _authorizerTargets.Select(t => t.TargetType).ToFrozenSet();
 
         // Pré-cálculo no registro: para cada requisição conhecida, os alvos registrados de tipo base ou interface que ela
         // implementa, já na ordem de execução (sem GetInterfaces/MakeGenericType em execução)
@@ -101,6 +103,12 @@ internal sealed class CqrsRegistry
         return _authorizerCache.GetOrAdd(typeof(TRequest),
             TargetOrder.Sort(registered.Prepend(AuthorizerTarget<TRequest>.Instance), t => t.TargetType, typeof(TRequest)));
     }
+
+    /// <summary>
+    /// <c>true</c> se há <c>IRequestAuthorizer&lt;<paramref name="targetType"/>&gt;</c> registrado pelo <c>AddTecCqrs</c>
+    /// (<c>AddRequestAuthorizer</c> ou varredura): esse authorizer existe e se aplica, sem precisar resolvê-lo.
+    /// </summary>
+    public bool IsDeclaredAuthorizer(Type targetType) => _declaredAuthorizerTypes.Contains(targetType);
 
     /// <summary>
     /// Repete, uma vez e sobre o container completo, a verificação de authorizers do <c>AddTecCqrs</c>: um

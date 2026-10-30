@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using TEC.Core.Common.Results;
+using TEC.Core.Exceptions;
 using TEC.Cqrs.Abstractions;
 using TEC.Cqrs.Authorization;
 using TEC.Cqrs.DependencyInjection;
@@ -236,6 +237,25 @@ public class OpenGenericAuthorizerTests
         var result = await scope.ServiceProvider.GetRequiredService<ISender>().Send(new NoAuthorizationQuery<int>());
 
         await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(scope.ServiceProvider.GetRequiredService<CallLog>().Entries).IsEmpty();
+    }
+
+    [Test]
+    public async Task Open_generic_authorizer_with_satisfied_constraint_rejects_anonymous_without_running()
+    {
+        // Risco: confirmar o authorizer aberto resolvendo-o não pode deixar o anônimo passar nem executar o authorizer
+        var services = new ServiceCollection();
+        services.AddSingleton<TEC.Cqrs.Authorization.IPrincipalAccessor>(new FakePrincipalAccessor());
+        services.AddScoped<CallLog>();
+        services.AddScoped(typeof(IRequestAuthorizer<>), typeof(TenantAuthorizer<>));
+        services.AddTecCqrs(o => o.AddQueryHandler<TenantQuery<int>, int, TenantQueryHandler<int>>());
+
+        using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+        using var scope = provider.CreateScope();
+        var result = await scope.ServiceProvider.GetRequiredService<ISender>().Send(new TenantQuery<int>());
+
+        await Assert.That(result.IsFailure).IsTrue();
+        await Assert.That(result.Error!.Code).IsEqualTo(UnauthenticatedException.DefaultCode);
         await Assert.That(scope.ServiceProvider.GetRequiredService<CallLog>().Entries).IsEmpty();
     }
 }

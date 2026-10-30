@@ -108,13 +108,30 @@ internal sealed class AuthorizationBehavior<TRequest, TResponse>(CqrsOptions opt
         return resolved is null ? [] : [.. resolved];
     }
 
-    /// <summary>Há authorizer registrado para algum dos alvos, consultado sem instanciá-lo (requer <c>isService</c>).</summary>
+    /// <summary>
+    /// Há authorizer que se aplica a algum dos alvos (requer <c>isService</c>). Os registrados pelo <c>AddTecCqrs</c> são
+    /// confirmados sem instanciá-los.
+    /// </summary>
+    /// <remarks>
+    /// Registro direto no container (fechado ou genérico aberto) é confirmado resolvendo: o <c>IsService</c> do container
+    /// da Microsoft responde <c>true</c> para um genérico aberto mesmo quando a restrição do parâmetro recusa a requisição,
+    /// e nesse caso o <c>GetServices</c> não devolve nenhum authorizer.
+    /// </remarks>
     private bool HasRegisteredAuthorizer(AuthorizerTarget[] targets)
     {
         foreach (var target in targets)
         {
-            if (isService!.IsService(target.ServiceType))
+            if (!isService!.IsService(target.ServiceType))
+                continue;
+
+            if (registry.IsDeclaredAuthorizer(target.TargetType))
                 return true;
+
+            foreach (var authorizer in target.Resolve(serviceProvider))
+            {
+                if (authorizer is not null)
+                    return true;
+            }
         }
 
         return false;
