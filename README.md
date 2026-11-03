@@ -28,6 +28,7 @@ Mediator próprio · `Result` em vez de exceção · Autorização e validação
 - [📥 Instalação](#-instalação)
 - [🚀 Início rápido](#-início-rápido)
 - [🧱 O pipeline](#-o-pipeline)
+- [🧩 Diagrama de arquitetura](#-diagrama-de-arquitetura)
 - [📚 Documentação](#-documentação)
 - [⚡ Compatibilidade](#-compatibilidade)
 - [🛡️ Segurança](#️-segurança)
@@ -214,6 +215,91 @@ flowchart LR
 
 Autorização vem **antes** da validação (quem não tem acesso não descobre as regras de validação) e a transação fica por
 último (só o handler e o commit ficam dentro dela). Detalhes de cada etapa: [🧱 Pipeline e behaviors](docs/pipeline-behaviors.md).
+
+## 🧩 Diagrama de arquitetura
+
+Componentes e ligações do `TEC.Cqrs`, gerados pelo [GitDiagram](https://gitdiagram.com/tudoemcodigo/lib-tec-cqrs) a partir da `main` em 02/11/2026. O diagrama é gerado por IA a partir de uma amostra do código: use-o como mapa de leitura, não como contrato.
+
+```mermaid
+flowchart TD
+
+subgraph group_core["Mediator core"]
+  node_request["Request contracts<br/>[IRequest.cs]"]
+  node_handler["Request handlers<br/>[IRequestHandler.cs]"]
+  node_mediator["Mediator dispatch<br/>[Mediator.cs]"]
+  node_registration["Service registration"]
+  node_registry["Request registry<br/>[CqrsRegistry.cs]"]
+  node_registered["Registered services"]
+  node_options["Pipeline options<br/>[CqrsOptions.cs]"]
+end
+
+subgraph group_pipeline["Request pipeline"]
+  node_behavior["Pipeline behaviors"]
+  node_authorization["Request authorization"]
+  node_authorizer["Request authorizers"]
+  node_validator["Request validation"]
+  node_transaction["Transaction behavior"]
+end
+
+subgraph group_integrations["Framework integrations"]
+  node_asp["ASP.NET Core adapter"]
+  node_httpauth["HTTP authorization adapters"]
+  node_httpprincipal["HTTP principal adapter"]
+  node_httpidem["HTTP idempotency"]
+  node_fluent["FluentValidation adapter"]
+end
+
+subgraph group_state["State and telemetry"]
+  node_context["Pipeline context<br/>[PipelineContext.cs]"]
+  node_unitofwork["Unit of work<br/>[IUnitOfWork.cs]"]
+  node_idempotency[("Idempotency store")]
+  node_telemetry["Diagnostics<br/>[CqrsDiagnostics.cs]"]
+end
+
+node_caller(("API, job, or consumer"))
+node_corelib["TEC.Core results"]
+node_unitworkimpl["Unit-of-work implementation"]
+
+node_caller -->|"sends request"| node_mediator
+node_mediator -->|"dispatches"| node_request
+node_mediator -->|"invokes"| node_handler
+node_registration -->|"registers"| node_mediator
+node_registration -->|"configures"| node_registry
+node_registration -->|"validates registrations"| node_registered
+node_registration -->|"configures"| node_options
+node_mediator -.->|"runs pipeline"| node_behavior
+node_behavior -->|"includes"| node_authorization
+node_authorization -->|"executes"| node_authorizer
+node_behavior -->|"validates after authorization"| node_validator
+node_behavior -->|"wraps commands"| node_transaction
+node_transaction -->|"uses"| node_unitofwork
+node_unitworkimpl -->|"implements"| node_unitofwork
+node_context -->|"tracks transaction state"| node_transaction
+node_context -->|"queues post-commit notifications"| node_request
+node_mediator -.->|"emits diagnostics"| node_telemetry
+node_asp -->|"exposes HTTP entry"| node_mediator
+node_asp -.->|"registers adapter"| node_httpauth
+node_authorization -->|"evaluates policies through"| node_httpauth
+node_authorization -.->|"reads principal through"| node_httpprincipal
+node_httpidem -->|"uses store"| node_idempotency
+node_fluent -->|"implements validation"| node_validator
+node_mediator -->|"returns Result"| node_corelib
+node_asp -->|"maps results to HTTP"| node_corelib
+
+
+classDef toneNeutral fill:#f8fafc,stroke:#334155,stroke-width:1.5px,color:#0f172a
+classDef toneBlue fill:#dbeafe,stroke:#2563eb,stroke-width:1.5px,color:#172554
+classDef toneAmber fill:#fef3c7,stroke:#d97706,stroke-width:1.5px,color:#78350f
+classDef toneMint fill:#dcfce7,stroke:#16a34a,stroke-width:1.5px,color:#14532d
+classDef toneRose fill:#ffe4e6,stroke:#e11d48,stroke-width:1.5px,color:#881337
+classDef toneIndigo fill:#e0e7ff,stroke:#4f46e5,stroke-width:1.5px,color:#312e81
+classDef toneTeal fill:#ccfbf1,stroke:#0f766e,stroke-width:1.5px,color:#134e4a
+class node_request,node_handler,node_mediator,node_registration,node_registry,node_registered,node_options toneBlue
+class node_behavior,node_authorization,node_authorizer,node_validator,node_transaction toneAmber
+class node_asp,node_httpauth,node_httpprincipal,node_httpidem,node_fluent,node_caller toneMint
+class node_context,node_unitofwork,node_idempotency,node_telemetry toneRose
+class node_corelib,node_unitworkimpl toneIndigo
+```
 
 ## 📚 Documentação
 
